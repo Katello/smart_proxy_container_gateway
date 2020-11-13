@@ -13,4 +13,7 @@ Gem::Specification.new do |s|
   s.test_files = s.files.grep(%r{^(test|spec|features)/})
   s.homepage = 'http://github.com/ianballou/smart_proxy_container_gateway'
   s.license = 'GPLv3'
+
+  s.add_dependency 'pg'
+  s.add_dependency 'sequel'
 end
