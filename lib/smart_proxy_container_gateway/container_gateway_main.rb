@@ -40,8 +40,47 @@ module Proxy::ContainerGateway
     end
 
     def get_catalog
-      uri = URI.parse(Proxy::ContainerGateway::Plugin.settings.pulp_endpoint + '/pulpcore_registry/v2/_catalog')
-      pulp_registry_request(uri).body
+      get_unauthenticated_repos
+    end
+
+    def get_unauthenticated_repos
+      conn = initialize_db
+      conn[:unauthenticated_repositories].map(:name)
+    end
+
+    def update_unauthenticated_repos(repo_names)
+      conn = initialize_db
+      unauthenticated_repos = conn[:unauthenticated_repositories]
+      unauthenticated_repos.delete
+      repo_names.each do |repo_name|
+        unauthenticated_repos.insert(:name => repo_name)
+      end
+    end
+
+    def authorized_for_repo?(repo_name)
+      conn = initialize_db
+      unauthenticated_repo = conn[:unauthenticated_repositories].where(name: repo_name).first
+      !unauthenticated_repo.nil?
+    end
+
+    def initialize_db
+      conn = Sequel.connect(adapter: :postgres,
+                            user: Proxy::ContainerGateway::Plugin.settings.postgres_db_username,
+                            password: Proxy::ContainerGateway::Plugin.settings.postgres_db_password,
+                            database: 'smart_proxy_container_gateway')
+      container_gateway_path = $LOAD_PATH.detect { |path| path.include? 'smart_proxy_container_gateway' }
+      begin
+        Sequel::Migrator.check_current(conn, "#{container_gateway_path}/smart_proxy_container_gateway/sequel_migrations")
+      rescue Sequel::Migrator::NotCurrentError
+        migrate_db(conn, container_gateway_path)
+      end
+      conn
+    end
+
+    private
+
+    def migrate_db(db_connection, container_gateway_path)
+       Sequel::Migrator.run(db_connection, "#{container_gateway_path}/smart_proxy_container_gateway/sequel_migrations")
     end
   end
 end
