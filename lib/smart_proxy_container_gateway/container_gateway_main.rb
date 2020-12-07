@@ -64,10 +64,10 @@ module Proxy::ContainerGateway
     end
 
     def initialize_db
-      conn = Sequel.connect(adapter: :postgres,
-                            user: Proxy::ContainerGateway::Plugin.settings.postgres_db_username,
-                            password: Proxy::ContainerGateway::Plugin.settings.postgres_db_password,
-                            database: 'smart_proxy_container_gateway')
+      conn = Sequel.postgres(host: Proxy::ContainerGateway::Plugin.settings.postgres_db_hostname,
+                             user: Proxy::ContainerGateway::Plugin.settings.postgres_db_username,
+                             password: Proxy::ContainerGateway::Plugin.settings.postgres_db_password,
+                             database: 'smart_proxy_container_gateway')
       container_gateway_path = $LOAD_PATH.detect { |path| path.include? 'smart_proxy_container_gateway' }
       begin
         Sequel::Migrator.check_current(conn, "#{container_gateway_path}/smart_proxy_container_gateway/sequel_migrations")
