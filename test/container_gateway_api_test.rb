@@ -1,6 +1,5 @@
 require 'test_helper'
 require 'webmock/test_unit'
-require 'mocha/test_unit'
 require 'rack/test'
 
 require 'smart_proxy_container_gateway/container_gateway'
