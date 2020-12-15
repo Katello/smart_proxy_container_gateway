@@ -1,4 +1,4 @@
-require File.expand_path('../lib/smart_proxy_container_gateway/version', __FILE__)
+require File.expand_path('./lib/smart_proxy_container_gateway/version', __dir__)
 
 Gem::Specification.new do |s|
   s.name = 'smart_proxy_container_gateway'
@@ -13,4 +13,6 @@ Gem::Specification.new do |s|
   s.test_files = s.files.grep(%r{^(test|spec|features)/})
   s.homepage = 'http://github.com/ianballou/smart_proxy_container_gateway'
   s.license = 'GPLv3'
+
+  s.required_ruby_version = '~> 2.5'
 end

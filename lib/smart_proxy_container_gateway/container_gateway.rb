@@ -1,12 +1,16 @@
-module Proxy::ContainerGateway
-  class NotFound < RuntimeError; end
+module Proxy
+  module ContainerGateway
+    class NotFound < RuntimeError; end
 
-  class Plugin < ::Proxy::Plugin
-    plugin 'container_gateway', Proxy::ContainerGateway::VERSION
+    class Plugin < ::Proxy::Plugin
+      plugin 'container_gateway', Proxy::ContainerGateway::VERSION
 
-    default_settings :hello_greeting => 'O hai!'
+      default_settings :pulp_endpoint => "https://#{`hostname`.strip}"
 
-    http_rackup_path File.expand_path('container_gateway_http_config.ru', File.expand_path('../', __FILE__))
-    https_rackup_path File.expand_path('container_gateway_http_config.ru', File.expand_path('../', __FILE__))
+      http_rackup_path File.expand_path('smart_proxy_container_gateway/container_gateway_http_config.ru',
+                                        File.expand_path('..', __dir__))
+      https_rackup_path File.expand_path('smart_proxy_container_gateway/container_gateway_http_config.ru',
+                                         File.expand_path('..', __dir__))
+    end
   end
 end
