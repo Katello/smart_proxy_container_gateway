@@ -8,6 +8,7 @@ group :development do
   gem 'rake'
   gem 'rack-test'
   gem 'webmock'
+  gem 'mocha'
   gem 'smart_proxy', :github => "theforeman/smart-proxy", :branch => 'develop'
 end
 

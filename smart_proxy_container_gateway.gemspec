@@ -15,4 +15,6 @@ Gem::Specification.new do |s|
   s.license = 'GPLv3'
 
   s.required_ruby_version = '~> 2.5'
+  s.add_dependency 'pg'
+  s.add_dependency 'sequel'
 end
