@@ -11,6 +11,10 @@ module Proxy
       helpers ::Proxy::Helpers
       Sequel.extension :migration, :core_extensions
 
+      get '/v1/_ping/?' do
+        Proxy::ContainerGateway.ping
+      end
+
       get '/v2/?' do
         Proxy::ContainerGateway.ping
       end
@@ -31,6 +35,20 @@ module Proxy
         end
         redirection_location = Proxy::ContainerGateway.blobs(params[:repository], params[:digest])
         redirect to(redirection_location)
+      end
+
+      get '/v1/search/?' do
+        # Checks for podman client and issues a 404 in that case. Podman
+        # examines the response from a /v1_search request. If the result
+        # is a 4XX, it will then proceed with a request to /_catalog
+        if !request.env['HTTP_USER_AGENT'].nil? && request.env['HTTP_USER_AGENT'].downcase.include?('libpod')
+          halt 404, "not found"
+        end
+
+        repositories = Proxy::ContainerGateway.v1_search(params)
+
+        content_type :json
+        { num_results: repositories.size, query: params[:q], results: repositories }.to_json
       end
 
       get '/v2/_catalog/?' do
@@ -58,6 +76,8 @@ module Proxy
           Proxy::ContainerGateway.update_unauthenticated_repos(repo_names)
         end
       end
+
+      private
 
       def redirect_authorization_headers
         response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'

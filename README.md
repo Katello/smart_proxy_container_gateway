@@ -20,6 +20,8 @@ ProxyPassReverse /pulp/container/ unix:///run/pulpcore-content.sock|http://cento
 
 ProxyPass /v2 https://127.0.0.1:9090/container_gateway/v2
 ProxyPassReverse https://127.0.0.1:9090/container_gateway/v2 /v2
+ProxyPass /v1 https://127.0.0.1:9090/container_gateway/v1
+ProxyPassReverse https://127.0.0.1:9090/container_gateway/v1 /v1
 ```
 
 # Server configuration

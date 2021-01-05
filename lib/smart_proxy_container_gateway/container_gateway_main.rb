@@ -38,13 +38,33 @@ module Proxy
         pulp_registry_request(uri)['location']
       end
 
+      def v1_search(params = {})
+        if params[:n].nil? || params[:n] == ""
+          params[:n] = 25
+        else
+          params[:n] = params[:n].to_i
+        end
+
+        repo_count = 0
+        repositories = []
+        Proxy::ContainerGateway.catalog.each do |repo_name|
+          break if repo_count >= params[:n]
+
+          if params[:q].nil? || params[:q] == "" || repo_name.include?(params[:q])
+            repo_count += 1
+            repositories << { name: repo_name }
+          end
+        end
+        repositories
+      end
+
       def catalog
         unauthenticated_repos
       end
 
       def unauthenticated_repos
         conn = initialize_db
-        conn[:unauthenticated_repositories].map(:name)
+        conn[:unauthenticated_repositories].order(:name).map(:name)
       end
 
       def update_unauthenticated_repos(repo_names)
