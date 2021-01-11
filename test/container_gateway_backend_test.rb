@@ -38,6 +38,19 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
     assert_empty ::Proxy::ContainerGateway.unauthenticated_repos
   end
 
+  def test_v1_search_query
+    ::Proxy::ContainerGateway.update_unauthenticated_repos(["test_repo1", "test_repo2"])
+    assert_equal [{ :name => "test_repo1" }, { :name => "test_repo2" }], ::Proxy::ContainerGateway.v1_search
+    assert_equal [{ :name => "test_repo1" }], ::Proxy::ContainerGateway.v1_search(q: "1")
+    assert_equal [{ :name => "test_repo2" }], ::Proxy::ContainerGateway.v1_search(q: "2")
+  end
+
+  def test_v1_item_limit
+    ::Proxy::ContainerGateway.update_unauthenticated_repos(["test_repo1", "test_repo2"])
+    assert_equal [{ :name => "test_repo1" }, { :name => "test_repo2" }], ::Proxy::ContainerGateway.v1_search(n: "2")
+    assert_equal [{ :name => "test_repo1" }], ::Proxy::ContainerGateway.v1_search(n: "1")
+  end
+
   def test_catalog
     ::Proxy::ContainerGateway.update_unauthenticated_repos(["test_repo1", "test_repo2", "test_repo3"])
     assert_equal ["test_repo1", "test_repo2", "test_repo3"], ::Proxy::ContainerGateway.catalog

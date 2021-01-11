@@ -6,7 +6,6 @@ require 'mocha/test_unit'
 require 'smart_proxy_container_gateway/container_gateway'
 require 'smart_proxy_container_gateway/container_gateway_api'
 
-# rubocop:disable Metrics/AbcSize
 class ContainerGatewayApiTest < Test::Unit::TestCase
   include Rack::Test::Methods
 
@@ -20,7 +19,16 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
                                                        :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key")
   end
 
-  def test_ping
+  def test_ping_v1
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/").
+      to_return(:body => '{}')
+    get '/v1/_ping'
+
+    assert last_response.ok?, "Last response was not ok: #{last_response.body}"
+    assert_equal('{}', last_response.body)
+  end
+
+  def test_ping_v2
     stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/").
       to_return(:body => '{}')
     get '/v2'
@@ -82,6 +90,14 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal ["test_repo"], JSON.parse(last_response.body)["repositories"]
   end
 
+  def test_v1_search
+    ::Proxy::ContainerGateway.expects(:unauthenticated_repos).returns(["test_repo"])
+    header 'HTTP_USER_AGENT', 'notpodman'
+    get '/v1/search'
+    assert last_response.ok?
+    assert_equal [{ "name" => "test_repo" }], JSON.parse(last_response.body)["results"]
+  end
+
   def test_catalog
     ::Proxy::ContainerGateway.expects(:unauthenticated_repos).returns(["test_repo"])
     get '/v2/_catalog'
@@ -89,4 +105,3 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal ["test_repo"], JSON.parse(last_response.body)["repositories"]
   end
 end
-# rubocop:enable Metrics/AbcSize
