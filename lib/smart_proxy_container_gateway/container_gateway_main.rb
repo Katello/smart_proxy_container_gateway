@@ -1,5 +1,6 @@
 require 'net/http'
 require 'uri'
+require 'digest'
 
 module Proxy
   module ContainerGateway
@@ -80,6 +81,22 @@ module Proxy
         conn = initialize_db
         unauthenticated_repo = conn[:unauthenticated_repositories].where(name: repo_name).first
         !unauthenticated_repo.nil?
+      end
+
+      def valid_token?(token)
+        tokens = initialize_db[:authentication_tokens]
+        tokens.where(token_checksum: Digest::SHA256.hexdigest(token)).where do
+          expire_at > Sequel::CURRENT_TIMESTAMP
+        end.count.positive?
+      end
+
+      def insert_token(username, token, expire_at_string, clear_expired_tokens: true)
+        tokens = initialize_db[:authentication_tokens]
+        checksum = Digest::SHA256.hexdigest(token)
+
+        tokens.where(:token_checksum => checksum).delete
+        tokens.insert(username: username, token_checksum: checksum, expire_at: expire_at_string.to_s)
+        tokens.where { expire_at < Sequel::CURRENT_TIMESTAMP }.delete if clear_expired_tokens
       end
 
       def initialize_db
