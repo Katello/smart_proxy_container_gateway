@@ -1,6 +1,7 @@
 require 'sinatra'
 require 'smart_proxy_container_gateway/container_gateway'
 require 'smart_proxy_container_gateway/container_gateway_main'
+require 'smart_proxy_container_gateway/foreman_api'
 require 'sequel'
 require 'pg'
 
@@ -16,7 +17,12 @@ module Proxy
       end
 
       get '/v2/?' do
-        Proxy::ContainerGateway.ping
+        if auth_header.present? && (auth_header.unauthorized_token? || auth_header.valid_user_token?)
+          Proxy::ContainerGateway.ping
+        else
+          redirect_authorization_headers
+          halt 401, "unauthorized"
+        end
       end
 
       get '/v2/:repository/manifests/:tag/?' do
@@ -61,6 +67,26 @@ module Proxy
         { repositories: Proxy::ContainerGateway.unauthenticated_repos }.to_json
       end
 
+      get '/v2/token' do
+        response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'
+
+        unless auth_header.present? && auth_header.basic_auth?
+          one_year = (60 * 60 * 24 * 365)
+          return { token: AuthorizationHeader::UNAUTHORIZED_TOKEN, issued_at: Time.now,
+expires_at: Time.now + one_year }.to_json
+        end
+
+        token_response = ForemanApi.new.fetch_token(auth_header.raw_header, request.params)
+        if token_response.code.to_i != 200
+          halt token_response.code.to_i, token_response.body
+        else
+          token_response_body = JSON.parse(token_response.body)
+          ContainerGateway.insert_token(request.params['account'], token_response_body['token'],
+                                        token_response_body['expires_at'])
+          return token_response_body.to_json
+        end
+      end
+
       put '/v2/unauthenticated_repository_list/?' do
         if params.key? :repositories
           repo_names = params[:repositories]
@@ -84,6 +110,42 @@ module Proxy
         response.headers['Www-Authenticate'] = "Bearer realm=\"https://#{request.host}/v2/token\"," \
                                                "service=\"#{request.host}\"," \
                                                "scope=\"repository:registry:pull,push\""
+      end
+
+      def auth_header
+        AuthorizationHeader.new(request.env['HTTP_AUTHORIZATION'])
+      end
+
+      class AuthorizationHeader
+        UNAUTHORIZED_TOKEN = 'unauthorized'.freeze
+
+        def initialize(value)
+          @value = value || ''
+        end
+
+        def valid_user_token?
+          token_auth? && ContainerGateway.valid_token?(@value.split(' ')[1])
+        end
+
+        def raw_header
+          @value
+        end
+
+        def present?
+          !@value.nil? && @value != ""
+        end
+
+        def unauthorized_token?
+          @value.split(' ')[1] == UNAUTHORIZED_TOKEN
+        end
+
+        def token_auth?
+          @value.split(' ')[0] == 'Bearer'
+        end
+
+        def basic_auth?
+          @value.split(' ')[0] == 'Basic'
+        end
       end
     end
   end

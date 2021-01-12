@@ -15,8 +15,13 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
 
   def setup
     Proxy::ContainerGateway::Plugin.load_test_settings(:pulp_endpoint => 'https://test.example.com',
+                                                       :katello_registry_path => '/v2/',
                                                        :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
-                                                       :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key")
+                                                       :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
+                                                       :postgres_db_username => 'smart_proxy_container_gateway_test_user',
+                                                       :postgres_db_password => 'smart_proxy_container_gateway_test_password',
+                                                       :postgres_db_name => 'smart_proxy_container_gateway_test',
+                                                       :postgres_db_hostname => 'localhost')
   end
 
   def test_ping_v1
@@ -28,13 +33,39 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal('{}', last_response.body)
   end
 
-  def test_ping_v2
+  def test_pingv2_unauthorized_token
     stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/").
       to_return(:body => '{}')
+
+    header "AUTHORIZATION", "Bearer unauthorized"
     get '/v2'
 
     assert last_response.ok?, "Last response was not ok: #{last_response.body}"
     assert_equal('{}', last_response.body)
+  end
+
+  def test_pingv2_no_auth
+    get '/v2'
+    assert last_response.unauthorized?
+  end
+
+  def test_pingv2_user_auth
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/").
+      to_return(:body => '{}')
+    token = 'ofyourappreciation'
+
+    Proxy::ContainerGateway.insert_token('someuser', token, Time.now + 60)
+
+    header "AUTHORIZATION", "Bearer #{token}"
+    get '/v2'
+    assert last_response.ok?, "Last response was not ok: #{last_response.body}"
+  end
+
+  def test_ping_bad_token
+    header "AUTHORIZATION", "Bearer blahblahblah"
+    get '/v2'
+
+    assert last_response.unauthorized?
   end
 
   def test_redirects_manifest_request
@@ -103,5 +134,30 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     get '/v2/_catalog'
     assert last_response.ok?
     assert_equal ["test_repo"], JSON.parse(last_response.body)["repositories"]
+  end
+
+  def test_token_no_auth
+    get '/v2/token'
+
+    assert last_response.ok?
+    assert_equal JSON.parse(last_response.body)["token"], 'unauthorized'
+  end
+
+  def test_token_basic_auth
+    ::Proxy::SETTINGS.foreman_url = 'https://foreman'
+    foreman_response = {
+      "token": "imarealtoken",
+        "expires_at": DateTime.now + (2 / 24.0)
+    }
+    stub_request(:get, "#{::Proxy::SETTINGS.foreman_url}/v2/token?account=foo").
+      to_return(:body => foreman_response.to_json)
+
+    # Basic foo:bar
+    header "AUTHORIZATION", "Basic Zm9vOmJhcg=="
+
+    get '/v2/token?account=foo'
+
+    assert last_response.ok?
+    assert_equal "imarealtoken", JSON.parse(last_response.body)["token"]
   end
 end

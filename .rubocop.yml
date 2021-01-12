@@ -23,6 +23,9 @@ Style/StringLiterals:
 Style/FrozenStringLiteralComment:
   Enabled: false
 
+Metrics/ModuleLength:
+  Max: 150
+
 Metrics/ClassLength:
   Exclude:
     - 'test/**/*'

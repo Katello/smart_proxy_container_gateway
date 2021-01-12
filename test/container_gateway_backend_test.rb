@@ -61,4 +61,20 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
     assert_true ::Proxy::ContainerGateway.authorized_for_repo?("test_repo1")
     assert_true ::Proxy::ContainerGateway.authorized_for_repo?("test_repo2")
   end
+
+  def test_insert_token
+    ::Proxy::ContainerGateway.insert_token('joe', 'mytoken', Time.now + 60)
+    assert ::Proxy::ContainerGateway.valid_token?('mytoken')
+  end
+
+  def test_bad_valid_token
+    refute ::Proxy::ContainerGateway.valid_token?('notmytoken')
+  end
+
+  def test_expired_tokens_deleted
+    ::Proxy::ContainerGateway.initialize_db[:authentication_tokens].delete
+    ::Proxy::ContainerGateway.insert_token('joe', 'myexpiredtoken', DateTime.now - (1 / 24.0), clear_expired_tokens: false)
+
+    refute ::Proxy::ContainerGateway.valid_token?('mytoken')
+  end
 end

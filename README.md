@@ -59,4 +59,13 @@ Running the full test suite requires setting up the test PostgreSQL database.  C
 - Database user: `smart_proxy_container_gateway_test_user`
 - Database user password: `smart_proxy_container_gateway_test_password`
 
-The database user must have full access to the test DB.
+The database user must have full access to the test DB.  These postgresql commands will set it up:  
+```
+# sudo -u postgres psql
+```
+
+```
+create role smart_proxy_container_gateway_test_user with login;
+alter role smart_proxy_container_gateway_test_user password 'smart_proxy_container_gateway_test_password';
+create database smart_proxy_container_gateway_test owner = smart_proxy_container_gateway_test_user;
+```
