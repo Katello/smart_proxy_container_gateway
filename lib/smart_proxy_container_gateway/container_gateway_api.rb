@@ -3,7 +3,7 @@ require 'smart_proxy_container_gateway/container_gateway'
 require 'smart_proxy_container_gateway/container_gateway_main'
 require 'smart_proxy_container_gateway/foreman_api'
 require 'sequel'
-require 'pg'
+require 'sqlite3'
 
 module Proxy
   module ContainerGateway

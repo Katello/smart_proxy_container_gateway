@@ -60,3 +60,5 @@ npm-debug.log
 /foreman/
 package-lock.json
 webpack/foremanReact/
+*.db
+.vendor/

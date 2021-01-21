@@ -100,10 +100,7 @@ module Proxy
       end
 
       def initialize_db
-        conn = Sequel.postgres(host: Proxy::ContainerGateway::Plugin.settings.postgres_db_hostname,
-                               user: Proxy::ContainerGateway::Plugin.settings.postgres_db_username,
-                               password: Proxy::ContainerGateway::Plugin.settings.postgres_db_password,
-                               database: Proxy::ContainerGateway::Plugin.settings.postgres_db_name)
+        conn = Sequel.connect("sqlite://#{Proxy::ContainerGateway::Plugin.settings.sqlite_db_path}")
         container_gateway_path = $LOAD_PATH.detect { |path| path.include? 'smart_proxy_container_gateway' }
         begin
           Sequel::Migrator.check_current(conn, "#{container_gateway_path}/smart_proxy_container_gateway/sequel_migrations")
