@@ -33,39 +33,20 @@ The Container Gateway plugin requires a Pulp 3 instance to connect to.  Related 
 :pulp_client_ssl_key: 'Path to RSA private key for the Pulp certificate'
 ```
 
-# Database configuration
+# Database information
 
-The Container Gateway plugin assumes that PostgreSQL is installed on the system since Katello + Pulp 3 is a requirement.
-
-For a manual installation, which is currently the only installation method, a database must be created with the name
-`smart_proxy_container_gateway`.  There must also be a PostgreSQL user who has full access to this database. Related configuration options:
-```
-:postgres_db_hostname: 'localhost'
-:postgres_db_username: 'db_user'
-:postgres_db_password: 'password'
-```
-
-Database migrations are completely automated.  The plugin checks if the database is up-to-date before each query.
+SQLite database migrations are completely automated.  The plugin checks if the database is up-to-date before each query.
 
 # Katello interaction
 
-Auth information is retrieved from the Katello server during smart proxy sync time and cached in the PostgreSQL database.
+Auth information is retrieved from the Katello server during smart proxy sync time and cached in the SQLite database.
+
+Logging in with a container client will cause the Container Gateway to fetch a token from Katello using the login information.
 
 # Testing
 
-Running the full test suite requires setting up the test PostgreSQL database.  Create the test database with the following configuration:
-
-- Database name: `smart_proxy_container_gateway_test`
-- Database user: `smart_proxy_container_gateway_test_user`
-- Database user password: `smart_proxy_container_gateway_test_password`
-
-The database user must have full access to the test DB.  These postgresql commands will set it up:  
 ```
-# sudo -u postgres psql
-```
+bundle exec rubocop
 
-```
-create role smart_proxy_container_gateway_test_user with login;
-alter role smart_proxy_container_gateway_test_user password 'smart_proxy_container_gateway_test_password';
-create database smart_proxy_container_gateway_test owner = smart_proxy_container_gateway_test_user;
+bundle exec rake test
 ```

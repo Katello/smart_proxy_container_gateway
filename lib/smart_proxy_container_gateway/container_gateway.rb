@@ -6,8 +6,8 @@ module Proxy
       plugin 'container_gateway', Proxy::ContainerGateway::VERSION
 
       default_settings :pulp_endpoint => "https://#{`hostname`.strip}",
-                       :postgres_db_name => 'smart_proxy_container_gateway',
-                       :katello_registry_path => '/v2/'
+                       :katello_registry_path => '/v2/',
+                       :sqlite_db_path => '/var/lib/foreman-proxy/smart_proxy_container_gateway.db'
 
       http_rackup_path File.expand_path('smart_proxy_container_gateway/container_gateway_http_config.ru',
                                         File.expand_path('..', __dir__))

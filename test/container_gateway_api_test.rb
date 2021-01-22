@@ -18,10 +18,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
                                                        :katello_registry_path => '/v2/',
                                                        :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
                                                        :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
-                                                       :postgres_db_username => 'smart_proxy_container_gateway_test_user',
-                                                       :postgres_db_password => 'smart_proxy_container_gateway_test_password',
-                                                       :postgres_db_name => 'smart_proxy_container_gateway_test',
-                                                       :postgres_db_hostname => 'localhost')
+                                                       :sqlite_db_path => 'container_gateway_test.db')
   end
 
   def test_ping_v1
