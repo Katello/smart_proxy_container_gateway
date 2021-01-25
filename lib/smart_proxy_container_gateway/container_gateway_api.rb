@@ -72,8 +72,8 @@ module Proxy
 
         unless auth_header.present? && auth_header.basic_auth?
           one_year = (60 * 60 * 24 * 365)
-          return { token: AuthorizationHeader::UNAUTHORIZED_TOKEN, issued_at: Time.now,
-expires_at: Time.now + one_year }.to_json
+          return { token: AuthorizationHeader::UNAUTHORIZED_TOKEN, issued_at: Time.now.iso8601,
+                   expires_at: (Time.now + one_year).iso8601 }.to_json
         end
 
         token_response = ForemanApi.new.fetch_token(auth_header.raw_header, request.params)
