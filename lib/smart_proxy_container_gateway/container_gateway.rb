@@ -5,9 +5,21 @@ module Proxy
     class Plugin < ::Proxy::Plugin
       plugin 'container_gateway', Proxy::ContainerGateway::VERSION
 
-      default_settings :pulp_endpoint => "https://#{`hostname`.strip}",
-                       :katello_registry_path => '/v2/',
-                       :sqlite_db_path => '/var/lib/foreman-proxy/smart_proxy_container_gateway.db'
+      begin
+        SETTINGS = Proxy::Settings.initialize_global_settings
+
+        default_settings :pulp_endpoint => "https://#{`hostname`.strip}",
+                         :pulp_client_ssl_ca => SETTINGS.foreman_ssl_ca,
+                         :pulp_client_ssl_cert => SETTINGS.foreman_ssl_cert,
+                         :pulp_client_ssl_key => SETTINGS.foreman_ssl_key,
+                         :katello_registry_path => '/v2/',
+                         :sqlite_db_path => '/var/lib/foreman-proxy/smart_proxy_container_gateway.db'
+      rescue Errno::ENOENT
+        logger.warn("Default settings could not be loaded.  Default certs will not be set.")
+        default_settings :pulp_endpoint => "https://#{`hostname`.strip}",
+                         :katello_registry_path => '/v2/',
+                         :sqlite_db_path => '/var/lib/foreman-proxy/smart_proxy_container_gateway.db'
+      end
 
       http_rackup_path File.expand_path('smart_proxy_container_gateway/container_gateway_http_config.ru',
                                         File.expand_path('..', __dir__))
