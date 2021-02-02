@@ -122,12 +122,12 @@ module Proxy
       end
 
       def pulp_cert
-        OpenSSL::X509::Certificate.new(File.open(Proxy::ContainerGateway::Plugin.settings.pulp_client_ssl_cert, 'r').read)
+        OpenSSL::X509::Certificate.new(File.read(Proxy::ContainerGateway::Plugin.settings.pulp_client_ssl_cert))
       end
 
       def pulp_key
         OpenSSL::PKey::RSA.new(
-          File.open(Proxy::ContainerGateway::Plugin.settings.pulp_client_ssl_key, 'r').read
+          File.read(Proxy::ContainerGateway::Plugin.settings.pulp_client_ssl_key)
         )
       end
     end

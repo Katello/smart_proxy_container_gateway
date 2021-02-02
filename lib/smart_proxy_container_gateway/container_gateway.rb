@@ -21,10 +21,7 @@ module Proxy
                          :sqlite_db_path => '/var/lib/foreman-proxy/smart_proxy_container_gateway.db'
       end
 
-      http_rackup_path File.expand_path('smart_proxy_container_gateway/container_gateway_http_config.ru',
-                                        File.expand_path('..', __dir__))
-      https_rackup_path File.expand_path('smart_proxy_container_gateway/container_gateway_http_config.ru',
-                                         File.expand_path('..', __dir__))
+      rackup_path File.join(__dir__, 'container_gateway_http_config.ru')
     end
   end
 end
