@@ -10,6 +10,7 @@ module Proxy
     class << self
       def pulp_registry_request(uri)
         http_client = Net::HTTP.new(uri.host, uri.port)
+        http_client.ca_file = pulp_ca
         http_client.cert = pulp_cert
         http_client.key = pulp_key
         http_client.use_ssl = true
@@ -114,6 +115,10 @@ module Proxy
 
       def migrate_db(db_connection, container_gateway_path)
         Sequel::Migrator.run(db_connection, "#{container_gateway_path}/smart_proxy_container_gateway/sequel_migrations")
+      end
+
+      def pulp_ca
+        Proxy::ContainerGateway::Plugin.settings.pulp_client_ssl_ca
       end
 
       def pulp_cert
