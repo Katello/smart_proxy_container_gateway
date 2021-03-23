@@ -2,7 +2,6 @@ require 'sinatra'
 require 'smart_proxy_container_gateway/container_gateway'
 require 'smart_proxy_container_gateway/container_gateway_main'
 require 'smart_proxy_container_gateway/foreman_api'
-require 'sequel'
 require 'sqlite3'
 
 module Proxy
@@ -10,7 +9,7 @@ module Proxy
     class Api < ::Sinatra::Base
       include ::Proxy::Log
       helpers ::Proxy::Helpers
-      Sequel.extension :migration, :core_extensions
+      helpers ::Sinatra::Authorization::Helpers
 
       get '/v1/_ping/?' do
         Proxy::ContainerGateway.ping
@@ -18,6 +17,7 @@ module Proxy
 
       get '/v2/?' do
         if auth_header.present? && (auth_header.unauthorized_token? || auth_header.valid_user_token?)
+          response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'
           Proxy::ContainerGateway.ping
         else
           redirect_authorization_headers
@@ -26,31 +26,32 @@ module Proxy
       end
 
       get '/v2/:repository/manifests/:tag/?' do
-        unless Proxy::ContainerGateway.authorized_for_repo?(params[:repository])
-          redirect_authorization_headers
-          halt 401, "unauthorized"
-        end
+        handle_repo_auth(params, auth_header, request)
         redirection_location = Proxy::ContainerGateway.manifests(params[:repository], params[:tag])
         redirect to(redirection_location)
       end
 
       get '/v2/:repository/blobs/:digest/?' do
-        unless Proxy::ContainerGateway.authorized_for_repo?(params[:repository])
-          redirect_authorization_headers
-          halt 401, "unauthorized"
-        end
+        handle_repo_auth(params, auth_header, request)
         redirection_location = Proxy::ContainerGateway.blobs(params[:repository], params[:digest])
         redirect to(redirection_location)
       end
 
       get '/v1/search/?' do
         # Checks for podman client and issues a 404 in that case. Podman
-        # examines the response from a /v1_search request. If the result
+        # examines the response from a /v1/search request. If the result
         # is a 4XX, it will then proceed with a request to /_catalog
         if !request.env['HTTP_USER_AGENT'].nil? && request.env['HTTP_USER_AGENT'].downcase.include?('libpod')
           halt 404, "not found"
         end
 
+        if auth_header.present? && !auth_header.blank?
+          username = auth_header.v1_foreman_authorized_username
+          if username.nil?
+            halt 401, "unauthorized"
+          end
+          params[:user] = username
+        end
         repositories = Proxy::ContainerGateway.v1_search(params)
 
         content_type :json
@@ -58,13 +59,23 @@ module Proxy
       end
 
       get '/v2/_catalog/?' do
-        content_type :json
-        { repositories: Proxy::ContainerGateway.catalog }.to_json
-      end
+        catalog = []
+        if auth_header.present?
+          if auth_header.unauthorized_token?
+            catalog = Proxy::ContainerGateway.catalog
+          elsif auth_header.valid_user_token?
+            catalog = Proxy::ContainerGateway.catalog(auth_header.user)
+          else
+            redirect_authorization_headers
+            halt 401, "unauthorized"
+          end
+        else
+          redirect_authorization_headers
+          halt 401, "unauthorized"
+        end
 
-      get '/v2/unauthenticated_repository_list/?' do
         content_type :json
-        { repositories: Proxy::ContainerGateway.unauthenticated_repos }.to_json
+        { repositories: catalog }.to_json
       end
 
       get '/v2/token' do
@@ -83,27 +94,55 @@ module Proxy
           token_response_body = JSON.parse(token_response.body)
           ContainerGateway.insert_token(request.params['account'], token_response_body['token'],
                                         token_response_body['expires_at'])
+
+          repo_response = ForemanApi.new.fetch_user_repositories(auth_header.raw_header, request.params)
+          if repo_response.code.to_i != 200
+            halt repo_response.code.to_i, repo_response.body
+          else
+            ContainerGateway.update_user_repositories(request.params['account'],
+                                                      JSON.parse(repo_response.body)['repositories'])
+          end
           return token_response_body.to_json
         end
       end
 
-      put '/v2/unauthenticated_repository_list/?' do
-        if params.key? :repositories
-          repo_names = params[:repositories]
-        else
-          repo_names = JSON.parse(request.body.read)["repositories"]
-        end
-      rescue JSON::ParserError
-        halt 400, "malformed repositories json"
-      else
-        if repo_names.nil?
-          Proxy::ContainerGateway.update_unauthenticated_repos([])
-        else
-          Proxy::ContainerGateway.update_unauthenticated_repos(repo_names)
-        end
+      get '/users/?' do
+        do_authorize_any
+
+        content_type :json
+        { users: User.map(:name) }.to_json
+      end
+
+      put '/user_repository_mapping/?' do
+        do_authorize_any
+
+        ContainerGateway.update_user_repo_mapping(params)
+        {}
+      end
+
+      put '/repository_list/?' do
+        do_authorize_any
+
+        ContainerGateway.update_repository_list(params['repositories'])
+        {}
       end
 
       private
+
+      def handle_repo_auth(params, auth_header, request)
+        user_token_is_valid = false
+        # FIXME: Getting unauthenticated token here...
+        if auth_header.present? && auth_header.valid_user_token?
+          user_token_is_valid = true
+          username = auth_header.user.name
+        end
+        username = request.params['account'] if username.nil?
+
+        return if Proxy::ContainerGateway.authorized_for_repo?(params[:repository], user_token_is_valid, username)
+
+        redirect_authorization_headers
+        halt 401, "unauthorized"
+      end
 
       def redirect_authorization_headers
         response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'
@@ -121,6 +160,10 @@ module Proxy
 
         def initialize(value)
           @value = value || ''
+        end
+
+        def user
+          ContainerGateway.token_user(@value.split(' ')[1])
         end
 
         def valid_user_token?
@@ -145,6 +188,19 @@ module Proxy
 
         def basic_auth?
           @value.split(' ')[0] == 'Basic'
+        end
+
+        def blank?
+          Base64.decode64(@value.split(' ')[1]) == ':'
+        end
+
+        # A special case for the V1 API.  Defer authentication to Foreman and return the username. `nil` if not authorized.
+        def v1_foreman_authorized_username
+          username = Base64.decode64(@value.split(' ')[1]).split(':')[0]
+          auth_response = ForemanApi.new.fetch_token(raw_header, { 'account' => username })
+          return username if auth_response.code.to_i == 200 && (JSON.parse(auth_response.body)['token'] != 'unauthenticated')
+
+          nil
         end
       end
     end
