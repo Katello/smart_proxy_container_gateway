@@ -123,7 +123,8 @@ module Proxy
       put '/repository_list/?' do
         do_authorize_any
 
-        ContainerGateway.update_repository_list(params['repositories'])
+        repositories = params['repositories'].nil? ? [] : params['repositories']
+        ContainerGateway.update_repository_list(repositories)
         {}
       end
 
