@@ -80,13 +80,13 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(true)
     redirect_headers = {
       'location' => "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
-                    "/pulp/container/test_repo/manifests/test_tag?validate_token=test_token"
+                    "/pulp/container/library/test_repo/manifests/test_tag?validate_token=test_token"
     }
     stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
-                       "/pulpcore_registry/v2/test_repo/manifests/test_tag").
+                       "/pulpcore_registry/v2/library/test_repo/manifests/test_tag").
       to_return(:status => 302, :body => '', :headers => redirect_headers)
 
-    get '/v2/test_repo/manifests/test_tag'
+    get '/v2/library/test_repo/manifests/test_tag'
     assert last_response.redirect?, "Last response was not a redirect: #{last_response.body}"
     assert_equal('', last_response.body)
   end
@@ -94,12 +94,12 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   def test_redirects_blob_request
     ::Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(true)
     redirect_headers = { 'location' => "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
-                                       "/pulp/container/test_repo/blobs/test_digest?validate_token=test_token" }
+                                       "/pulp/container/library/test_repo/blobs/test_digest?validate_token=test_token" }
     stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
-                       "/pulpcore_registry/v2/test_repo/blobs/test_digest").
+                       "/pulpcore_registry/v2/library/test_repo/blobs/test_digest").
       to_return(:status => 302, :body => '', :headers => redirect_headers)
 
-    get '/v2/test_repo/blobs/test_digest'
+    get '/v2/library/test_repo/blobs/test_digest'
     assert last_response.redirect?, "Last response was not a redirect: #{last_response.body}"
     assert_equal('', last_response.body)
   end
