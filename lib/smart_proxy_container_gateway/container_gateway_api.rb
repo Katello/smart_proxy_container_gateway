@@ -25,15 +25,19 @@ module Proxy
         end
       end
 
-      get '/v2/:repository/manifests/:tag/?' do
-        handle_repo_auth(params, auth_header, request)
-        redirection_location = Proxy::ContainerGateway.manifests(params[:repository], params[:tag])
+      get '/v2/*/manifests/*/?' do
+        repository = params[:splat][0]
+        tag = params[:splat][1]
+        handle_repo_auth(repository, auth_header, request)
+        redirection_location = Proxy::ContainerGateway.manifests(repository, tag)
         redirect to(redirection_location)
       end
 
-      get '/v2/:repository/blobs/:digest/?' do
-        handle_repo_auth(params, auth_header, request)
-        redirection_location = Proxy::ContainerGateway.blobs(params[:repository], params[:digest])
+      get '/v2/*/blobs/*/?' do
+        repository = params[:splat][0]
+        digest = params[:splat][1]
+        handle_repo_auth(repository, auth_header, request)
+        redirection_location = Proxy::ContainerGateway.blobs(repository, digest)
         redirect to(redirection_location)
       end
 
@@ -130,7 +134,7 @@ module Proxy
 
       private
 
-      def handle_repo_auth(params, auth_header, request)
+      def handle_repo_auth(repository, auth_header, request)
         user_token_is_valid = false
         # FIXME: Getting unauthenticated token here...
         if auth_header.present? && auth_header.valid_user_token?
@@ -139,7 +143,7 @@ module Proxy
         end
         username = request.params['account'] if username.nil?
 
-        return if Proxy::ContainerGateway.authorized_for_repo?(params[:repository], user_token_is_valid, username)
+        return if Proxy::ContainerGateway.authorized_for_repo?(repository, user_token_is_valid, username)
 
         redirect_authorization_headers
         halt 401, "unauthorized"
