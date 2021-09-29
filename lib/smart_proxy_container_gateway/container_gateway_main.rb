@@ -92,6 +92,8 @@ module Proxy
         RepositoryUser.dataset.delete
         user_repo_maps['users'].each do |user_repo_map|
           user_repo_map.each do |user, repos|
+            next if repos.nil?
+
             repos.each do |repo|
               found_repo = Repository.find(name: repo['repository'],
                                            auth_required: repo['auth_required'].to_s.downcase == "true")
