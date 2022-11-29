@@ -41,6 +41,12 @@ module Proxy
         redirect to(redirection_location)
       end
 
+      get '/v2/*/tags/list/?' do
+        repository = params[:splat][0]
+        handle_repo_auth(repository, auth_header, request)
+        Proxy::ContainerGateway.tags(repository)
+      end
+
       get '/v1/search/?' do
         # Checks for podman client and issues a 404 in that case. Podman
         # examines the response from a /v1/search request. If the result
