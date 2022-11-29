@@ -76,6 +76,15 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert last_response.unauthorized?
   end
 
+  def test_list_tags
+    Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(true)
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                       "/pulpcore_registry/v2/library/test_repo/tags/list").
+      to_return(:status => 200, :body => "{\"repository\":\"library/test_repo\", \"tags\":[\"latest\"]}")
+    get '/v2/library/test_repo/tags/list'
+    assert_equal("{\"repository\":\"library/test_repo\", \"tags\":[\"latest\"]}", last_response.body)
+  end
+
   def test_redirects_manifest_request
     Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(true)
     redirect_headers = {
