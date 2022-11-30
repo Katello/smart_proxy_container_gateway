@@ -11,7 +11,7 @@ Gem::Specification.new do |s|
   s.extra_rdoc_files = ['README.md', 'LICENSE']
   s.files = Dir['{lib,settings.d,bundler.d}/**/*'] + s.extra_rdoc_files
   s.test_files = s.files.grep(%r{^(test|spec|features)/})
-  s.homepage = 'http://github.com/ianballou/smart_proxy_container_gateway'
+  s.homepage = 'https://github.com/Katello/smart_proxy_container_gateway'
   s.license = 'GPLv3'
 
   s.required_ruby_version = '~> 2.5'
