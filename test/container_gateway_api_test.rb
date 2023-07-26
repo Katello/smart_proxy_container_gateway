@@ -85,6 +85,20 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal("{\"repository\":\"library/test_repo\", \"tags\":[\"latest\"]}", last_response.body)
   end
 
+  def test_list_tags_pagination_link
+    Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(true)
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                       "/pulpcore_registry/v2/library/test_repo/tags/list?n=100&last=latest").
+      to_return(:status => 200, :body => "{\"repository\":\"library/test_repo\", \"tags\":[\"latest\"]}",
+                :headers => { 'link' => ["<#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                                         "/v2/library/test_repo/tags/list?n=100&last=latest>; rel=\"next\""] })
+    get '/v2/library/test_repo/tags/list?n=100&last=latest'
+    assert_equal("{\"repository\":\"library/test_repo\", \"tags\":[\"latest\"]}", last_response.body)
+    assert_equal("<#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                   "/v2/library/test_repo/tags/list?n=100&last=latest>; rel=\"next\"",
+                 last_response.headers['link'])
+  end
+
   def test_redirects_manifest_request
     Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(true)
     redirect_headers = {

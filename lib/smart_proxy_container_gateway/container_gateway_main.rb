@@ -41,11 +41,18 @@ module Proxy
         pulp_registry_request(uri)['location']
       end
 
-      def tags(repository)
+      def tags(repository, params = {})
+        query = "?"
+        unless params[:n].nil? || params[:n] == ""
+          query = "#{query}n=#{params[:n]}"
+          query = "#{query}&" unless params[:last].nil?
+        end
+        query = "#{query}last=#{params[:last]}" unless params[:last].nil? || params[:last] == ""
+
         uri = URI.parse(
-          "#{Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/#{repository}/tags/list"
+          "#{Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/#{repository}/tags/list#{query}"
         )
-        pulp_registry_request(uri).body
+        pulp_registry_request(uri)
       end
 
       def v1_search(params = {})
