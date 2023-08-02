@@ -44,7 +44,15 @@ module Proxy
       get '/v2/*/tags/list/?' do
         repository = params[:splat][0]
         handle_repo_auth(repository, auth_header, request)
-        Proxy::ContainerGateway.tags(repository)
+        pulp_response = Proxy::ContainerGateway.tags(repository, params)
+        # "link"=>["<http://pulpcore-api/v2/container-image-name/tags/list?n=100&last=last-tag-name>; rel=\"next\""],
+        # https://docs.docker.com/registry/spec/api/#pagination-1
+        if pulp_response['link'].nil?
+          headers['link'] = ""
+        else
+          headers['link'] = pulp_response['link']
+        end
+        pulp_response.body
       end
 
       get '/v1/search/?' do
