@@ -174,7 +174,8 @@ module Proxy
 
       def initialize_db
         file_path = Proxy::ContainerGateway::Plugin.settings.sqlite_db_path
-        conn = Sequel.connect("sqlite://#{file_path}")
+        sqlite_timeout = Proxy::ContainerGateway::Plugin.settings.sqlite_timeout
+        conn = Sequel.connect("sqlite://#{file_path}", timeout: sqlite_timeout)
         container_gateway_path = $LOAD_PATH.detect { |path| path.include? 'smart_proxy_container_gateway' }
         begin
           Sequel::Migrator.check_current(conn, "#{container_gateway_path}/smart_proxy_container_gateway/sequel_migrations")
