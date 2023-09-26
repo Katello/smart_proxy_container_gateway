@@ -7,7 +7,8 @@ module Proxy
 
       default_settings :pulp_endpoint => "https://#{`hostname`.strip}",
                        :katello_registry_path => '/v2/',
-                       :sqlite_db_path => '/var/lib/foreman-proxy/smart_proxy_container_gateway.db'
+                       :sqlite_db_path => '/var/lib/foreman-proxy/smart_proxy_container_gateway.db',
+                       :sqlite_timeout => 30_000
 
       # Load defaults that copy values from SETTINGS. This is done as
       # programmable settings since SETTINGS isn't initialized during plugin

@@ -6,3 +6,5 @@
 :pulp_client_ssl_key: 'RSA private key for the Pulp certificate'
 :katello_registry_path: 'Katello container registry suffix, e.g., /v2/'
 :sqlite_db_path: '/var/lib/foreman-proxy/smart_proxy_container_gateway.db'
+# Database busy timeout in milliseconds
+:sqlite_timeout: 30000
