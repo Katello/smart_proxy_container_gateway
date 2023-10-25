@@ -1,3 +1,7 @@
+require 'active_support'
+require 'active_support/core_ext/integer'
+require 'active_support/core_ext/string'
+require 'active_support/time_with_zone'
 require 'sinatra'
 require 'smart_proxy_container_gateway/container_gateway'
 require 'smart_proxy_container_gateway/container_gateway_main'
@@ -100,18 +104,38 @@ module Proxy
         response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'
 
         unless auth_header.present? && auth_header.basic_auth?
-          one_year = (60 * 60 * 24 * 365)
-          return { token: AuthorizationHeader::UNAUTHORIZED_TOKEN, issued_at: Time.now.iso8601,
-                   expires_at: (Time.now + one_year).iso8601 }.to_json
+          return { token: AuthorizationHeader::UNAUTHORIZED_TOKEN, issued_at: Time.now.rfc3339,
+                   expires_in: 1.year.seconds.to_i }.to_json
         end
 
         token_response = ForemanApi.new.fetch_token(auth_header.raw_header, request.params)
         if token_response.code.to_i != 200
           halt token_response.code.to_i, token_response.body
         else
+          # This returned token should follow OAuth2 spec. We need some minor conversion
+          # to store the token with the expires_at time (using rfc3339).
           token_response_body = JSON.parse(token_response.body)
-          ContainerGateway.insert_token(request.params['account'], token_response_body['token'],
-                                        token_response_body['expires_at'])
+
+          if token_response_body['token'].nil?
+            halt 502, "Recieved malformed token response"
+          end
+
+          # "issued_at" is an optional field. Per OAuth2 we assume time of token response as
+          # the issue time if the field is ommitted.
+          token_issue_time = (token_response_body["issued_at"] || token_response["Date"])&.to_time
+          if token_issue_time.nil?
+            halt 502, "Recieved malformed token response"
+          end
+
+          # 'expires_in' is an optional field. If not provided, assume 60 seconds per OAuth2 spec
+          expires_in = token_response_body.fetch("expires_in", 60)
+          expires_at = token_issue_time + expires_in.seconds
+
+          ContainerGateway.insert_token(
+            request.params['account'],
+            token_response_body['token'],
+            expires_at.rfc3339
+          )
 
           repo_response = ForemanApi.new.fetch_user_repositories(auth_header.raw_header, request.params)
           if repo_response.code.to_i != 200
@@ -120,7 +144,9 @@ module Proxy
             ContainerGateway.update_user_repositories(request.params['account'],
                                                       JSON.parse(repo_response.body)['repositories'])
           end
-          return token_response_body.to_json
+
+          # Return the original token response from Katello
+          return token_response.body
         end
       end
 

@@ -1,7 +1,7 @@
 inherit_from: .rubocop_todo.yml
 
 AllCops:
-  TargetRubyVersion: 2.5
+  TargetRubyVersion: 2.7
 
 # Don't prefer is_a? over kind_of?
 Style/ClassCheck:

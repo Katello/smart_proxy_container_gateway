@@ -195,7 +195,8 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     ::Proxy::SETTINGS.foreman_url = 'https://foreman'
     foreman_response = {
       "token": "imarealtoken",
-        "expires_at": DateTime.now + (2 / 24.0)
+      "issued_at": DateTime.now,
+      "expires_in": 180
     }
     stub_request(:get, "#{::Proxy::SETTINGS.foreman_url}/v2/token?account=foo").
       to_return(:body => foreman_response.to_json)
