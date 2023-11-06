@@ -14,7 +14,8 @@ Gem::Specification.new do |s|
   s.homepage = 'https://github.com/Katello/smart_proxy_container_gateway'
   s.license = 'GPLv3'
 
-  s.required_ruby_version = '~> 2.5'
+  s.required_ruby_version = '~> 2.7'
+  s.add_dependency 'activesupport'
   s.add_dependency 'sequel'
   s.add_dependency 'sqlite3'
 end
