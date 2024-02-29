@@ -4,11 +4,13 @@ require 'digest'
 require 'sequel'
 module Proxy
   module ContainerGateway
+    extend Proxy::DHCP::DependencyInjection
     extend ::Proxy::Util
     extend ::Proxy::Log
 
+    inject_attr :database, :database
+
     class << self
-      Sequel.extension :migration, :core_extensions
       def pulp_registry_request(uri)
         http_client = Net::HTTP.new(uri.host, uri.port)
         http_client.ca_file = pulp_ca
@@ -57,45 +59,46 @@ module Proxy
 
       def v1_search(params = {})
         if params[:n].nil? || params[:n] == ""
-          params[:n] = 25
+          limit = 25
         else
-          params[:n] = params[:n].to_i
+          limit = params[:n].to_i
         end
 
-        repo_count = 0
-        repositories = []
-        user = params[:user].nil? ? nil : User.find(name: params[:user])
-        Proxy::ContainerGateway.catalog(user).each do |repo_name|
-          break if repo_count >= params[:n]
+        query = params[:q]
+        query = nil if query == ''
 
-          if params[:q].nil? || params[:q] == "" || repo_name.include?(params[:q])
-            repo_count += 1
-            repositories << { name: repo_name }
-          end
-        end
-        repositories
+        user = params[:user].nil? ? nil : database[:useres].find(name: params[:user])
+
+        # TODO: relies on catalog returning a query
+        repositories = query ? catalog(user).filter(:name.like("%#{query}%")) : catalog(user)
+        repositories.limit(limit)
       end
 
       def catalog(user = nil)
         if user.nil?
           unauthenticated_repos
         else
-          (unauthenticated_repos + user.repositories_dataset.map(:name)).sort
+          # TODO implement as a single query
+          unauthenticated_repos | user.repositories_dataset.select(:name)
         end
       end
 
       def unauthenticated_repos
-        Repository.where(auth_required: false).order(:name).map(:name)
+        database[:repository].where(auth_required: false).order(:name).select(:name)
       end
 
       # Replaces the entire list of repositories
       def update_repository_list(repo_list)
-        RepositoryUser.dataset.delete
-        Repository.dataset.delete
-        repo_list.each do |repo|
-          Repository.find_or_create(name: repo['repository'],
-                                    auth_required: repo['auth_required'].to_s.downcase == "true")
-        end
+        # TODO: make repositories_users cascade on delete repository
+        database[:repositories_users].delete
+
+        repository = database[:repository]
+        repository.delete
+
+        repository.import(
+          [:name, :auth_required],
+          repo_list.map { |repo| [repo['repository'], repo['auth_required'].to_s.downcase == "true"] },
+        )
       end
 
       # Replaces the entire user-repo mapping for all logged-in users
@@ -103,40 +106,38 @@ module Proxy
         # Get hash map of all users and their repositories
         # Ex: {"users"=> [{"admin"=>[{"repository"=>"repo", "auth_required"=>"true"}]}]}
         # Go through list of repositories and add them to the DB
-        RepositoryUser.dataset.delete
-        user_repo_maps['users'].each do |user_repo_map|
-          user_repo_map.each do |user, repos|
-            next if repos.nil?
+        repositories = database[:repositories]
 
-            repos.each do |repo|
-              found_repo = Repository.find(name: repo['repository'],
-                                           auth_required: repo['auth_required'].to_s.downcase == "true")
-              if found_repo.nil?
-                logger.warn("#{repo['repository']} does not exist in this smart proxy's environments")
-              elsif found_repo.auth_required
-                found_repo.add_user(User.find(name: user))
-              end
-            end
+        entries = user_repo_maps['users'].flat_map do |user_repo_map|
+          user_repo_map.filter_map do |username, repos|
+            user_repo_names = repos.filter { |repo| repo['auth_required'].to_s.downcase == "true" }.map { |repo| repo['repository'] }
+            user = database[:user].find(name: username)
+            # TODO: check you can select a static column like this
+            repositories.where(name: user_repo_names, auth_required: true).select(:id, user_id: user.id)
           end
         end
+
+        repository_users = database[:repository_users]
+        repository_users.delete
+        repositories_users.import([:repository_id, :user_id], entries)
       end
 
       # Replaces the user-repo mapping for a single user
       def update_user_repositories(username, repositories)
-        user = User.where(name: username).first
-        user.remove_all_repositories
-        repositories.each do |repo_name|
-          found_repo = Repository.find(name: repo_name)
-          if found_repo.nil?
-            logger.warn("#{repo_name} does not exist in this smart proxy's environments")
-          elsif user.repositories_dataset.where(name: repo_name).first.nil? && found_repo.auth_required
-            user.add_repository(found_repo)
-          end
-        end
+        user = database[:user].find(name: username)
+
+        user_repositories = database[:user_repositories]
+        user_repositories.delete(user_id: user.id)
+
+        user_repositories.import(
+          [:repository_id, :user_id],
+          # TODO: check you can select a static column like this
+          database[:repositories].where(name: repositories, auth_required: true).select(:id, user_id: user.id),
+        )
       end
 
       def authorized_for_repo?(repo_name, user_token_is_valid, username = nil)
-        repository = Repository.where(name: repo_name).first
+        repository = database[:repositories].find(name: repo_name)
 
         # Repository doesn't exist
         return false if repository.nil?
@@ -144,52 +145,37 @@ module Proxy
         # Repository doesn't require auth
         return true unless repository.auth_required
 
-        if username && user_token_is_valid && repository.auth_required
+        if username && user_token_is_valid
           # User is logged in and has access to the repository
-          user = User.find(name: username)
-          return !user.repositories_dataset.where(name: repo_name).first.nil?
+          return database[:repositories_users].where(repository_id: repository.id, user_id: database[:user].select(:id).where(name: username)).exists
         end
 
         false
       end
 
       def token_user(token)
-        User[AuthenticationToken.find(token_checksum: checksum(token)).user_id]
+        database[:users].find(id: database[:authentication_tokens].where(token_checksum: checksum(token)).select(:user_id))
       end
 
       def valid_token?(token)
-        AuthenticationToken.where(token_checksum: checksum(token)).where do
+        database[:authentication_tokens].where(token_checksum: checksum(token)).where do
           expire_at > Sequel::CURRENT_TIMESTAMP
-        end.count.positive?
+        end.exists
       end
 
       def insert_token(username, token, expire_at_string, clear_expired_tokens: true)
-        chksum = checksum(token)
-        user = User.find_or_create(name: username)
+        user = database[:users].find_or_create(name: username)
 
-        AuthenticationToken.where(:token_checksum => chksum).delete
-        AuthenticationToken.create(token_checksum: chksum, expire_at: expire_at_string.to_s, user_id: user.id)
-        AuthenticationToken.where { expire_at < Sequel::CURRENT_TIMESTAMP }.delete if clear_expired_tokens
-      end
+        authentication_tokens = database[:authentication_tokens]
 
-      def initialize_db
-        file_path = Proxy::ContainerGateway::Plugin.settings.sqlite_db_path
-        sqlite_timeout = Proxy::ContainerGateway::Plugin.settings.sqlite_timeout
-        conn = Sequel.connect("sqlite://#{file_path}", timeout: sqlite_timeout)
-        container_gateway_path = $LOAD_PATH.detect { |path| path.include? 'smart_proxy_container_gateway' }
-        begin
-          Sequel::Migrator.check_current(conn, "#{container_gateway_path}/smart_proxy_container_gateway/sequel_migrations")
-        rescue Sequel::Migrator::NotCurrentError
-          migrate_db(conn, container_gateway_path)
-        end
-        conn
+        # TODO: check if this upsert is actually correct
+        authentication_tokens.insert_conflict(:update).insert(token_checksum: checksum(token), expire_at: expire_at_string.to_s, user_id: user.id)
+
+        # TODO: create a background service that does this
+        authentication_tokens.where { expire_at < Sequel::CURRENT_TIMESTAMP }.delete if clear_expired_tokens
       end
 
       private
-
-      def migrate_db(db_connection, container_gateway_path)
-        Sequel::Migrator.run(db_connection, "#{container_gateway_path}/smart_proxy_container_gateway/sequel_migrations")
-      end
 
       def pulp_ca
         Proxy::ContainerGateway::Plugin.settings.pulp_client_ssl_ca
@@ -208,21 +194,6 @@ module Proxy
       def checksum(token)
         Digest::SHA256.hexdigest(token)
       end
-    end
-
-    class Repository < ::Sequel::Model(Proxy::ContainerGateway.initialize_db[:repositories])
-      many_to_many :users
-    end
-
-    class User < ::Sequel::Model(Proxy::ContainerGateway.initialize_db[:users])
-      many_to_many :repositories
-      one_to_many :authentication_tokens
-    end
-
-    class RepositoryUser < ::Sequel::Model(Proxy::ContainerGateway.initialize_db[:repositories_users]); end
-
-    class AuthenticationToken < ::Sequel::Model(Proxy::ContainerGateway.initialize_db[:authentication_tokens])
-      many_to_one :users
     end
   end
 end

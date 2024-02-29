@@ -25,6 +25,12 @@ module Proxy
       validate :pulp_endpoint, url: true
 
       rackup_path File.join(__dir__, 'container_gateway_http_config.ru')
+
+      def load_dependency_injection_wirings(container, settings)
+        container.singleton_dependency :database, (lambda do
+          Proxy::Database.new(url: settings.sqlite_db_path, timeout: settings.sqlite_timeout)
+        end)
+      end
     end
   end
 end
