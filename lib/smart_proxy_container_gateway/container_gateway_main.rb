@@ -154,21 +154,21 @@ module Proxy
       end
 
       def token_user(token)
-        User[AuthenticationToken.find(token_checksum: Digest::SHA256.hexdigest(token)).user_id]
+        User[AuthenticationToken.find(token_checksum: checksum(token)).user_id]
       end
 
       def valid_token?(token)
-        AuthenticationToken.where(token_checksum: Digest::SHA256.hexdigest(token)).where do
+        AuthenticationToken.where(token_checksum: checksum(token)).where do
           expire_at > Sequel::CURRENT_TIMESTAMP
         end.count.positive?
       end
 
       def insert_token(username, token, expire_at_string, clear_expired_tokens: true)
-        checksum = Digest::SHA256.hexdigest(token)
+        chksum = checksum(token)
         user = User.find_or_create(name: username)
 
-        AuthenticationToken.where(:token_checksum => checksum).delete
-        AuthenticationToken.create(token_checksum: checksum, expire_at: expire_at_string.to_s, user_id: user.id)
+        AuthenticationToken.where(:token_checksum => chksum).delete
+        AuthenticationToken.create(token_checksum: chksum, expire_at: expire_at_string.to_s, user_id: user.id)
         AuthenticationToken.where { expire_at < Sequel::CURRENT_TIMESTAMP }.delete if clear_expired_tokens
       end
 
@@ -203,6 +203,10 @@ module Proxy
         OpenSSL::PKey::RSA.new(
           File.read(Proxy::ContainerGateway::Plugin.settings.pulp_client_ssl_key)
         )
+      end
+
+      def checksum(token)
+        Digest::SHA256.hexdigest(token)
       end
     end
 
