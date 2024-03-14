@@ -25,6 +25,15 @@ module Proxy
       validate :pulp_endpoint, url: true
 
       rackup_path File.join(__dir__, 'container_gateway_http_config.ru')
+
+      load_dependency_injection_wirings do |container_instance, settings|
+        # For some reason, doing this kills the entire plugin.
+        container_instance.singleton_dependency :database_impl, (lambda do
+          Proxy::ContainerGateway::Database.new(
+            sqlite_db_path: settings[:sqlite_db_path], timeout: settings[:sqlite_timeout]
+          )
+        end)
+      end
     end
   end
 end

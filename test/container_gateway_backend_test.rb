@@ -3,7 +3,6 @@ require 'webmock/test_unit'
 require 'rack/test'
 require 'mocha/test_unit'
 
-# rubocop:disable Metrics/AbcSize
 class ContainerGatewayBackendTest < Test::Unit::TestCase
   include Rack::Test::Methods
 
@@ -165,4 +164,3 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
     assert_equal ::Proxy::ContainerGateway::Repository.all, user.repositories
   end
 end
-# rubocop:enable Metrics/AbcSize
