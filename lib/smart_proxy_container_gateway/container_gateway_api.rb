@@ -79,19 +79,23 @@ module Proxy
           end
           params[:user] = username
         end
-        repositories = Proxy::ContainerGateway.v1_search(params)
+        repositories = Proxy::ContainerGateway.v1_search(database, params)
 
         content_type :json
-        { num_results: repositories.size, query: params[:q], results: repositories }.to_json
+        {
+          num_results: repositories.size,
+          query: params[:q],
+          results: repositories.map { |repo_name| { description: '', name: repo_name } }
+        }.to_json
       end
 
       get '/v2/_catalog/?' do
         catalog = []
         if auth_header.present?
           if auth_header.unauthorized_token?
-            catalog = Proxy::ContainerGateway.catalog(database)
+            catalog = Proxy::ContainerGateway.catalog(database).select_map(::Sequel[:repositories][:name])
           elsif auth_header.valid_user_token?
-            catalog = Proxy::ContainerGateway.catalog(database, auth_header.user)
+            catalog = Proxy::ContainerGateway.catalog(database, auth_header.user).select_map(::Sequel[:repositories][:name])
           else
             redirect_authorization_headers
             halt 401, "unauthorized"

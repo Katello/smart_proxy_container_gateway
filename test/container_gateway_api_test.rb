@@ -3,6 +3,7 @@ require 'webmock/test_unit'
 require 'rack/test'
 require 'mocha/test_unit'
 
+# rubocop:disable Metrics/AbcSize, Metrics/MethodLength
 class ContainerGatewayApiTest < Test::Unit::TestCase
   include Rack::Test::Methods
 
@@ -23,13 +24,16 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
                                                        :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
                                                        :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
                                                        :sqlite_db_path => 'container_gateway_test.db')
+    sqlite_db_path = Proxy::ContainerGateway::Plugin.settings[:sqlite_db_path]
+    timeout = Proxy::ContainerGateway::Plugin.settings[:sqlite_timeout]
+    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: sqlite_db_path, timeout: timeout)
   end
 
   def teardown
-    Proxy::ContainerGateway::AuthenticationToken.dataset.delete
-    Proxy::ContainerGateway::RepositoryUser.dataset.delete
-    Proxy::ContainerGateway::User.dataset.delete
-    Proxy::ContainerGateway::Repository.dataset.delete
+    @database.connection[:authentication_tokens].delete
+    @database.connection[:repositories_users].delete
+    @database.connection[:users].delete
+    @database.connection[:repositories].delete
   end
 
   def test_ping_v1
@@ -60,16 +64,15 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   def test_pingv2_user_auth
     stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/").
       to_return(:body => '{}')
-    token = 'ofyourappreciation'
+    ::Proxy::ContainerGateway::Api::AuthorizationHeader.any_instance.expects(:valid_user_token?).returns(true)
 
-    Proxy::ContainerGateway.insert_token('someuser', token, Time.now + 60)
-
-    header "AUTHORIZATION", "Bearer #{token}"
+    header "AUTHORIZATION", "Bearer some_token"
     get '/v2'
     assert last_response.ok?, "Last response was not ok: #{last_response.body}"
   end
 
   def test_pingv2_bad_token
+    ::Proxy::ContainerGateway::Api::AuthorizationHeader.any_instance.expects(:valid_user_token?).returns(false)
     header "AUTHORIZATION", "Bearer blahblahblah"
     get '/v2'
 
@@ -77,7 +80,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   end
 
   def test_list_tags
-    Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(true)
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_repo_auth).returns({})
     stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
                        "/pulpcore_registry/v2/library/test_repo/tags/list").
       to_return(:status => 200, :body => "{\"repository\":\"library/test_repo\", \"tags\":[\"latest\"]}")
@@ -86,7 +89,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   end
 
   def test_list_tags_pagination_link
-    Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(true)
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_repo_auth).returns({})
     stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
                        "/pulpcore_registry/v2/library/test_repo/tags/list?n=100&last=latest").
       to_return(:status => 200, :body => "{\"repository\":\"library/test_repo\", \"tags\":[\"latest\"]}",
@@ -100,7 +103,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   end
 
   def test_redirects_manifest_request
-    Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(true)
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_repo_auth).returns({})
     redirect_headers = {
       'location' => "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
                     "/pulp/container/library/test_repo/manifests/test_tag?validate_token=test_token"
@@ -115,7 +118,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   end
 
   def test_redirects_blob_request
-    ::Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(true)
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_repo_auth).returns({})
     redirect_headers = { 'location' => "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
                                        "/pulp/container/library/test_repo/blobs/test_digest?validate_token=test_token" }
     stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
@@ -128,12 +131,14 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   end
 
   def test_unauthorized_for_manifests
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).returns(@database)
     ::Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(false)
     get '/v2/test_repo/manifests/test_tag'
     assert_equal 401, last_response.status
   end
 
   def test_unauthorized_for_blobs
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).returns(@database)
     ::Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(false)
     get '/v2/test_repo/blobs/test_digest'
     assert_equal 401, last_response.status
@@ -141,14 +146,20 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
 
   def test_put_repository_list
     repo_list = { 'repositories' => [{ 'repository' => 'test_repo', 'auth_required' => 'false' }] }
-    ::Proxy::ContainerGateway.expects(:update_repository_list).with(repo_list['repositories']).returns(true)
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).returns(@database)
+    ::Proxy::ContainerGateway.expects(:update_repository_list).with(@database, repo_list['repositories']).returns(true)
     put '/repository_list', repo_list
     assert last_response.ok?
   end
 
   def test_v1_search_with_user
-    ::Proxy::ContainerGateway::User.expects(:find).with(name: 'test_user').returns('test_user')
-    ::Proxy::ContainerGateway.expects(:catalog).with('test_user').returns(["test_repo"])
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).once.returns(@database)
+    user_id = @database.connection[:users].insert(name: 'test_user')
+    catalog = ["test_repo"]
+    ::Proxy::ContainerGateway.expects(:catalog).
+      with(@database, @database.connection[:users].first(id: user_id)).returns(catalog)
+    catalog.expects(:limit).returns(catalog)
+    catalog.expects(:select_map).returns(catalog)
 
     foreman_auth_response = { :token => 'not unauthorized' }
     stub_request(:get, "https://foreman/v2/token?account=test_user").
@@ -163,22 +174,29 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     # Basic test_user:test_password
     header "AUTHORIZATION", "Basic dGVzdF91c2VyOnRlc3RfcGFzc3dvcmQ="
 
-    get '/v1/search'
+    get '/v1/search?user=test_user'
     assert last_response.ok?
-    assert_equal [{ "name" => "test_repo" }], JSON.parse(last_response.body)["results"]
+    assert_equal [{ "description" => "", "name" => "test_repo" }], JSON.parse(last_response.body)["results"]
   end
 
   def test_v1_search_with_no_user
-    ::Proxy::ContainerGateway.expects(:catalog).with(nil).returns(["test_repo"])
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).once.returns(@database)
+    catalog = ["test_repo"]
+    ::Proxy::ContainerGateway.expects(:catalog).with(@database, nil).returns(catalog)
+    catalog.expects(:limit).returns(catalog)
+    catalog.expects(:select_map).returns(catalog)
     header 'HTTP_USER_AGENT', 'notpodman'
     get '/v1/search'
     assert last_response.ok?
-    assert_equal [{ "name" => "test_repo" }], JSON.parse(last_response.body)["results"]
+    assert_equal [{ "description" => "", "name" => "test_repo" }].sort, JSON.parse(last_response.body)["results"].sort
   end
 
   def test_catalog_unauthorized_token
     header "AUTHORIZATION", "Basic unauthorized"
-    ::Proxy::ContainerGateway.expects(:catalog).with.returns(["test_repo"])
+    catalog = ["test_repo"]
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).returns(@database)
+    ::Proxy::ContainerGateway.expects(:catalog).with(@database).returns(catalog)
+    catalog.expects(:select_map).returns(catalog)
     get '/v2/_catalog'
     assert last_response.ok?
     assert_equal ["test_repo"], JSON.parse(last_response.body)["repositories"]
@@ -192,6 +210,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   end
 
   def test_token_basic_auth
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).twice.returns(@database)
     ::Proxy::SETTINGS.foreman_url = 'https://foreman'
     foreman_response = {
       "token": "imarealtoken",
@@ -209,8 +228,8 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     header "AUTHORIZATION", "Basic Zm9vOmJhcg=="
 
     get '/v2/token?account=foo'
-
     assert last_response.ok?
     assert_equal "imarealtoken", JSON.parse(last_response.body)["token"]
   end
 end
+# rubocop:enable Metrics/AbcSize, Metrics/MethodLength

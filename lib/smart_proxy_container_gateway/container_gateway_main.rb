@@ -53,37 +53,36 @@ module Proxy
         pulp_registry_request(uri)
       end
 
-      def v1_search(params = {})
+      def v1_search(database, params = {})
         if params[:n].nil? || params[:n] == ""
           limit = 25
         else
           limit = params[:n].to_i
         end
+        return [] unless limit.positive?
 
         query = params[:q]
         query = nil if query == ''
 
-        user = params[:user].nil? ? nil : database[:users][{ name: params[:user] }]
+        user = params[:user].nil? ? nil : database.connection[:users][{ name: params[:user] }]
 
-        # TODO: rely on catalog returning a query
-        repositories = query ? catalog(database, user).filter(:name.like("%#{query}%")) : catalog(database, user)
-        repositories.limit(limit)
+        repositories = query ? catalog(database, user).grep(:name, "%#{query}%") : catalog(database, user)
+        repositories.limit(limit).select_map(::Sequel[:repositories][:name])
       end
 
       def catalog(database, user = nil)
         if user.nil?
           unauthenticated_repos(database)
         else
-          query = "SELECT repositories.name AS name FROM repositories" \
-            " INNER JOIN repositories_users ON repositories.id = repositories_users.repository_id" \
-            " INNER JOIN users ON repositories_users.user_id = users.id " \
-            " WHERE users.id = #{user[:id]} OR repositories.auth_required = FALSE"
-          database.connection.fetch(query).order(:name).all.map { |repo| repo[:name] }
+          database.connection[:repositories].
+            left_join(:repositories_users, repository_id: :id).
+            left_join(:users, ::Sequel[:users][:id] => :user_id).where(user_id: user[:id]).
+            or(Sequel[:repositories][:auth_required] => false).order(::Sequel[:repositories][:name])
         end
       end
 
       def unauthenticated_repos(database)
-        database.connection[:repositories].where(auth_required: false).order(:name).select_map(:name)
+        database.connection[:repositories].where(auth_required: false).order(:name)
       end
 
       # Replaces the entire list of repositories
@@ -116,11 +115,12 @@ module Proxy
             repositories.where(name: user_repo_names, auth_required: true).select(:id).map { |repo| [repo[:id], user[:id]] }
           end
         end
+        entries.flatten!(1)
 
         repositories_users = database.connection[:repositories_users]
         database.connection.transaction do
           repositories_users.delete
-          repositories_users.import(%i[repository_id user_id], entries[0])
+          repositories_users.import(%i[repository_id user_id], entries)
         end
       end
 
@@ -152,9 +152,9 @@ module Proxy
 
         if username && user_token_is_valid
           # User is logged in and has access to the repository
-          return database.connection[:repositories_users].where(
-            repository_id: repository[:id], user_id: database.connection[:users].where(name: username)
-          ).exists
+          return !database.connection[:repositories_users].where(
+            repository_id: repository[:id], user_id: database.connection[:users].first(name: username)[:id]
+          ).empty?
         end
 
         false
@@ -167,9 +167,9 @@ module Proxy
       end
 
       def valid_token?(database, token)
-        database.connection[:authentication_tokens].where(token_checksum: checksum(token)).where do
+        !database.connection[:authentication_tokens].where(token_checksum: checksum(token)).where do
           expire_at > Sequel::CURRENT_TIMESTAMP
-        end.exists
+        end.empty?
       end
 
       def insert_token(database, username, token, expire_at_string, clear_expired_tokens: true)
