@@ -6,7 +6,9 @@ require 'sinatra'
 require 'smart_proxy_container_gateway/container_gateway'
 require 'smart_proxy_container_gateway/container_gateway_main'
 require 'smart_proxy_container_gateway/foreman_api'
+require 'smart_proxy_container_gateway/dependency_injection'
 require 'sqlite3'
+require 'sequel'
 
 module Proxy
   module ContainerGateway
@@ -14,6 +16,9 @@ module Proxy
       include ::Proxy::Log
       helpers ::Proxy::Helpers
       helpers ::Sinatra::Authorization::Helpers
+      extend ::Proxy::ContainerGateway::DependencyInjection
+
+      inject_attr :database_impl, :database
 
       get '/v1/_ping/?' do
         Proxy::ContainerGateway.ping
@@ -74,19 +79,23 @@ module Proxy
           end
           params[:user] = username
         end
-        repositories = Proxy::ContainerGateway.v1_search(params)
+        repositories = Proxy::ContainerGateway.v1_search(database, params)
 
         content_type :json
-        { num_results: repositories.size, query: params[:q], results: repositories }.to_json
+        {
+          num_results: repositories.size,
+          query: params[:q],
+          results: repositories.map { |repo_name| { description: '', name: repo_name } }
+        }.to_json
       end
 
       get '/v2/_catalog/?' do
         catalog = []
         if auth_header.present?
           if auth_header.unauthorized_token?
-            catalog = Proxy::ContainerGateway.catalog
+            catalog = Proxy::ContainerGateway.catalog(database).select_map(::Sequel[:repositories][:name])
           elsif auth_header.valid_user_token?
-            catalog = Proxy::ContainerGateway.catalog(auth_header.user)
+            catalog = Proxy::ContainerGateway.catalog(database, auth_header.user).select_map(::Sequel[:repositories][:name])
           else
             redirect_authorization_headers
             halt 401, "unauthorized"
@@ -97,6 +106,7 @@ module Proxy
         end
 
         content_type :json
+        logger.debug(catalog)
         { repositories: catalog }.to_json
       end
 
@@ -132,6 +142,7 @@ module Proxy
           expires_at = token_issue_time + expires_in.seconds
 
           ContainerGateway.insert_token(
+            database,
             request.params['account'],
             token_response_body['token'],
             expires_at.rfc3339
@@ -141,7 +152,7 @@ module Proxy
           if repo_response.code.to_i != 200
             halt repo_response.code.to_i, repo_response.body
           else
-            ContainerGateway.update_user_repositories(request.params['account'],
+            ContainerGateway.update_user_repositories(database, request.params['account'],
                                                       JSON.parse(repo_response.body)['repositories'])
           end
 
@@ -154,13 +165,13 @@ module Proxy
         do_authorize_any
 
         content_type :json
-        { users: User.map(:name) }.to_json
+        { users: database.connection[:users].map(:name) }.to_json
       end
 
       put '/user_repository_mapping/?' do
         do_authorize_any
 
-        ContainerGateway.update_user_repo_mapping(params)
+        ContainerGateway.update_user_repo_mapping(database, params)
         {}
       end
 
@@ -168,7 +179,7 @@ module Proxy
         do_authorize_any
 
         repositories = params['repositories'].nil? ? [] : params['repositories']
-        ContainerGateway.update_repository_list(repositories)
+        ContainerGateway.update_repository_list(database, repositories)
         {}
       end
 
@@ -176,14 +187,13 @@ module Proxy
 
       def handle_repo_auth(repository, auth_header, request)
         user_token_is_valid = false
-        # FIXME: Getting unauthenticated token here...
         if auth_header.present? && auth_header.valid_user_token?
           user_token_is_valid = true
-          username = auth_header.user.name
+          username = auth_header.user[:name]
         end
         username = request.params['account'] if username.nil?
 
-        return if Proxy::ContainerGateway.authorized_for_repo?(repository, user_token_is_valid, username)
+        return if Proxy::ContainerGateway.authorized_for_repo?(database, repository, user_token_is_valid, username)
 
         redirect_authorization_headers
         halt 401, "unauthorized"
@@ -201,6 +211,9 @@ module Proxy
       end
 
       class AuthorizationHeader
+        extend ::Proxy::ContainerGateway::DependencyInjection
+
+        inject_attr :database_impl, :database
         UNAUTHORIZED_TOKEN = 'unauthorized'.freeze
 
         def initialize(value)
@@ -208,11 +221,11 @@ module Proxy
         end
 
         def user
-          ContainerGateway.token_user(@value.split(' ')[1])
+          ContainerGateway.token_user(database, @value.split(' ')[1])
         end
 
         def valid_user_token?
-          token_auth? && ContainerGateway.valid_token?(@value.split(' ')[1])
+          token_auth? && ContainerGateway.valid_token?(database, @value.split(' ')[1])
         end
 
         def raw_header
