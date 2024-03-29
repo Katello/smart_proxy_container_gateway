@@ -88,7 +88,7 @@ module Proxy
       # Replaces the entire list of repositories
       def update_repository_list(database, repo_list)
         # repositories_users cascades on deleting repositories (or users)
-        database.connection.transaction do
+        database.connection.transaction(isolation: :serializable, retry_on: [Sequel::SerializationFailure]) do
           repository = database.connection[:repositories]
           repository.delete
 
@@ -118,7 +118,7 @@ module Proxy
         entries.flatten!(1)
 
         repositories_users = database.connection[:repositories_users]
-        database.connection.transaction do
+        database.connection.transaction(isolation: :serializable, retry_on: [Sequel::SerializationFailure]) do
           repositories_users.delete
           repositories_users.import(%i[repository_id user_id], entries)
         end
@@ -129,7 +129,9 @@ module Proxy
         user = database.connection[:users][{ name: username }]
 
         user_repositories = database.connection[:repositories_users]
-        database.connection.transaction do
+        database.connection.transaction(isolation: :serializable,
+                                        retry_on: [Sequel::SerializationFailure],
+                                        num_retries: 10) do
           user_repositories.where(user_id: user[:id]).delete
 
           user_repositories.import(

@@ -25,8 +25,8 @@ Sequel.migration do
     end
 
     # Populate the new user_id foreign key for all authentication_tokens
-    from(:authentication_tokens).insert([:user_id],
-                                        from(:users).select(:id).where(name: self[:authentication_tokens][:username]))
+    from(:authentication_tokens).
+      update(user_id: from(:users).select(:id).where(name: Sequel[:authentication_tokens][:username]))
 
     alter_table(:authentication_tokens) do
       drop_column :username
