@@ -4,10 +4,16 @@ module Proxy
     class Database
       attr_reader :connection
 
-      def initialize(sqlite_db_path:, timeout:)
-        @connection = Sequel.connect("sqlite://#{sqlite_db_path}", timeout: timeout)
-        @connection.run("PRAGMA foreign_keys = ON;")
-        @connection.run("PRAGMA journal_mode = wal;")
+      def initialize(sqlite_db_path: nil, sqlite_timeout: nil,
+                     postgres_host: nil, postgres_port: nil, postgres_user: nil, postgres_name: nil, postgres_password: nil)
+        unless sqlite_db_path.nil?
+          @connection = Sequel.connect("sqlite://#{sqlite_db_path}", timeout: sqlite_timeout)
+          @connection.run("PRAGMA foreign_keys = ON;")
+          @connection.run("PRAGMA journal_mode = wal;")
+        else
+          @connection = Sequel.postgres(host: postgres_host, user: postgres_user,
+                                        database: postgres_database, password: postgres_password)
+        end
         migrate
       end
 

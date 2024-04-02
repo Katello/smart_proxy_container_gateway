@@ -17,7 +17,8 @@ class ContainerGatewayApiFeaturesTest < Test::Unit::TestCase
     db_path = Tempfile.new.path
     Proxy::DefaultModuleLoader.any_instance.expects(:load_configuration_file)
                               .with('container_gateway.yml')
-                              .returns(enabled: true, sqlite_db_path: db_path)
+                              .returns(enabled: true, database_backend: 'sqlite',
+                                       sqlite_db_path: db_path, sqlite_timeout: 30_000)
 
     get '/features'
 

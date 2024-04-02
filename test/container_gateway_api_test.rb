@@ -25,8 +25,8 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
                                                        :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
                                                        :sqlite_db_path => 'container_gateway_test.db')
     sqlite_db_path = Proxy::ContainerGateway::Plugin.settings[:sqlite_db_path]
-    timeout = Proxy::ContainerGateway::Plugin.settings[:sqlite_timeout]
-    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: sqlite_db_path, timeout: timeout)
+    sqlite_timeout = Proxy::ContainerGateway::Plugin.settings[:sqlite_timeout]
+    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: sqlite_db_path, sqlite_timeout: sqlite_timeout)
   end
 
   def teardown

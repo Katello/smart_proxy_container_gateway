@@ -35,11 +35,22 @@ The Container Gateway plugin requires a Pulp 3 instance to connect to.  Related 
 
 # Database information
 
-SQLite database migrations are completely automated.  The plugin checks if the database is up-to-date before each query.
+SQLite and PostgreSQL are supported, with SQLite being the default for development and testing.
+Use PostgreSQL in production for improved performance by adding the following settings:
+```
+# Example PostgreSQL connection settings
+:database_backend: postgres
+:postgres_host: localhost
+:postgres_user: foreman-proxy
+:postgres_database: container_gateway
+:postgres_password: changeme
+```
+
+Database migrations are completely automated.  The plugin checks if the database is up-to-date at initialization time.
 
 # Katello interaction
 
-Auth information is retrieved from the Katello server during smart proxy sync time and cached in the SQLite database.
+Auth information is retrieved from the Katello server during smart proxy sync time and cached in the database.
 
 Logging in with a container client will cause the Container Gateway to fetch a token from Katello using the login information.
 

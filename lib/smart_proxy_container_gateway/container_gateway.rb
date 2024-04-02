@@ -7,6 +7,7 @@ module Proxy
 
       default_settings :pulp_endpoint => "https://#{`hostname`.strip}",
                        :katello_registry_path => '/v2/',
+                       :database_backend => 'sqlite',
                        :sqlite_db_path => '/var/lib/foreman-proxy/smart_proxy_container_gateway.db',
                        :sqlite_timeout => 30_000
 
@@ -27,11 +28,17 @@ module Proxy
       rackup_path File.join(__dir__, 'container_gateway_http_config.ru')
 
       load_dependency_injection_wirings do |container_instance, settings|
-        # For some reason, doing this kills the entire plugin.
         container_instance.singleton_dependency :database_impl, (lambda do
-          Proxy::ContainerGateway::Database.new(
-            sqlite_db_path: settings[:sqlite_db_path], timeout: settings[:sqlite_timeout]
-          )
+          if settings[:database_backend] == 'sqlite'
+            Proxy::ContainerGateway::Database.new(
+              sqlite_db_path: settings[:sqlite_db_path], sqlite_timeout: settings[:sqlite_timeout]
+            )
+          else
+            Proxy::ContainerGateway::Database.new(
+              postgres_host: settings[:postgres_host], postgres_user: settings[:postgres_user],
+              postgres_database: settings[:postgres_database], postgres_password: settings[:postgres_password]
+            )
+          end
         end)
       end
     end
