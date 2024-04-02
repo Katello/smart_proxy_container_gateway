@@ -1,12 +1,22 @@
 require 'net/http'
 require 'uri'
 require 'digest'
+require 'smart_proxy_container_gateway/dependency_injection'
 module Proxy
   module ContainerGateway
     extend ::Proxy::Util
     extend ::Proxy::Log
 
-    class << self
+    class ContainerGatewayMain
+      #extend ::Proxy::ContainerGateway::DependencyInjection
+
+      #inject_attr :database_impl, :database
+
+      # TODO: make this method unnecessary by figuring out why container_instance is nil during dependency injection.
+      def database
+        @database ||= ::Proxy::Plugins.instance.find { |p| p[:name] == :container_gateway }[:di_container].get_dependency(:database_impl)
+      end
+
       def pulp_registry_request(uri)
         http_client = Net::HTTP.new(uri.host, uri.port)
         http_client.ca_file = pulp_ca
@@ -53,7 +63,7 @@ module Proxy
         pulp_registry_request(uri)
       end
 
-      def v1_search(database, params = {})
+      def v1_search(params = {})
         if params[:n].nil? || params[:n] == ""
           limit = 25
         else
@@ -66,13 +76,13 @@ module Proxy
 
         user = params[:user].nil? ? nil : database.connection[:users][{ name: params[:user] }]
 
-        repositories = query ? catalog(database, user).grep(:name, "%#{query}%") : catalog(database, user)
+        repositories = query ? catalog(user).grep(:name, "%#{query}%") : catalog(user)
         repositories.limit(limit).select_map(::Sequel[:repositories][:name])
       end
 
-      def catalog(database, user = nil)
+      def catalog(user = nil)
         if user.nil?
-          unauthenticated_repos(database)
+          unauthenticated_repos
         else
           database.connection[:repositories].
             left_join(:repositories_users, repository_id: :id).
@@ -81,12 +91,12 @@ module Proxy
         end
       end
 
-      def unauthenticated_repos(database)
+      def unauthenticated_repos
         database.connection[:repositories].where(auth_required: false).order(:name)
       end
 
       # Replaces the entire list of repositories
-      def update_repository_list(database, repo_list)
+      def update_repository_list(repo_list)
         # repositories_users cascades on deleting repositories (or users)
         database.connection.transaction(isolation: :serializable, retry_on: [Sequel::SerializationFailure]) do
           repository = database.connection[:repositories]
@@ -100,7 +110,7 @@ module Proxy
       end
 
       # Replaces the entire user-repo mapping for all logged-in users
-      def update_user_repo_mapping(database, user_repo_maps)
+      def update_user_repo_mapping(user_repo_maps)
         # Get hash map of all users and their repositories
         # Ex: {"users"=> [{"admin"=>[{"repository"=>"repo", "auth_required"=>"true"}]}]}
         # Go through list of repositories and add them to the DB
@@ -125,7 +135,7 @@ module Proxy
       end
 
       # Replaces the user-repo mapping for a single user
-      def update_user_repositories(database, username, repositories)
+      def update_user_repositories(username, repositories)
         user = database.connection[:users][{ name: username }]
 
         user_repositories = database.connection[:repositories_users]
@@ -143,7 +153,7 @@ module Proxy
         end
       end
 
-      def authorized_for_repo?(database, repo_name, user_token_is_valid, username = nil)
+      def authorized_for_repo?(repo_name, user_token_is_valid, username = nil)
         repository = database.connection[:repositories][{ name: repo_name }]
 
         # Repository doesn't exist
@@ -162,19 +172,19 @@ module Proxy
         false
       end
 
-      def token_user(database, token)
+      def token_user(token)
         database.connection[:users][{
           id: database.connection[:authentication_tokens].where(token_checksum: checksum(token)).select(:user_id)
         }]
       end
 
-      def valid_token?(database, token)
+      def valid_token?(token)
         !database.connection[:authentication_tokens].where(token_checksum: checksum(token)).where do
           expire_at > Sequel::CURRENT_TIMESTAMP
         end.empty?
       end
 
-      def insert_token(database, username, token, expire_at_string, clear_expired_tokens: true)
+      def insert_token(username, token, expire_at_string, clear_expired_tokens: true)
         checksum = Digest::SHA256.hexdigest(token)
         user = Sequel::Model(database.connection[:users]).find_or_create(name: username)
 

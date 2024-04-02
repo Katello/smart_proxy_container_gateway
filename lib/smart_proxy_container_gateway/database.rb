@@ -5,7 +5,7 @@ module Proxy
       attr_reader :connection
 
       def initialize(sqlite_db_path: nil, sqlite_timeout: nil,
-                     postgres_host: nil, postgres_port: nil, postgres_user: nil, postgres_name: nil, postgres_password: nil)
+                     postgres_host: nil, postgres_user: nil, postgres_database: nil, postgres_password: nil)
         unless sqlite_db_path.nil?
           @connection = Sequel.connect("sqlite://#{sqlite_db_path}", timeout: sqlite_timeout)
           @connection.run("PRAGMA foreign_keys = ON;")

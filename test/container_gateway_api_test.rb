@@ -14,6 +14,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
                                                      :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
                                                      :sqlite_db_path => 'container_gateway_test.db')
   require 'smart_proxy_container_gateway/container_gateway_api'
+  require 'smart_proxy_container_gateway/database'
 
   def app
     Proxy::ContainerGateway::Api.new
@@ -27,6 +28,10 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     sqlite_db_path = Proxy::ContainerGateway::Plugin.settings[:sqlite_db_path]
     sqlite_timeout = Proxy::ContainerGateway::Plugin.settings[:sqlite_timeout]
     @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: sqlite_db_path, sqlite_timeout: sqlite_timeout)
+    @container_gateway_main = Proxy::ContainerGateway::ContainerGatewayMain.new
+    @container_gateway_main.stubs(:database).returns(@database)
+    ::Proxy::ContainerGateway::Api.any_instance.stubs(:database).returns(@database)
+    ::Proxy::ContainerGateway::Api.any_instance.stubs(:container_gateway_main).returns(@container_gateway_main)
   end
 
   def teardown
@@ -131,33 +136,29 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   end
 
   def test_unauthorized_for_manifests
-    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).returns(@database)
-    ::Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(false)
+    @container_gateway_main.expects(:authorized_for_repo?).returns(false)
     get '/v2/test_repo/manifests/test_tag'
     assert_equal 401, last_response.status
   end
 
   def test_unauthorized_for_blobs
-    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).returns(@database)
-    ::Proxy::ContainerGateway.expects(:authorized_for_repo?).returns(false)
+    @container_gateway_main.expects(:authorized_for_repo?).returns(false)
     get '/v2/test_repo/blobs/test_digest'
     assert_equal 401, last_response.status
   end
 
   def test_put_repository_list
     repo_list = { 'repositories' => [{ 'repository' => 'test_repo', 'auth_required' => 'false' }] }
-    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).returns(@database)
-    ::Proxy::ContainerGateway.expects(:update_repository_list).with(@database, repo_list['repositories']).returns(true)
+    @container_gateway_main.expects(:update_repository_list).with(repo_list['repositories']).returns(true)
     put '/repository_list', repo_list
     assert last_response.ok?
   end
 
   def test_v1_search_with_user
-    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).once.returns(@database)
     user_id = @database.connection[:users].insert(name: 'test_user')
     catalog = ["test_repo"]
-    ::Proxy::ContainerGateway.expects(:catalog).
-      with(@database, @database.connection[:users].first(id: user_id)).returns(catalog)
+    @container_gateway_main.expects(:catalog).
+      with(@database.connection[:users].first(id: user_id)).returns(catalog)
     catalog.expects(:limit).returns(catalog)
     catalog.expects(:select_map).returns(catalog)
 
@@ -180,9 +181,8 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   end
 
   def test_v1_search_with_no_user
-    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).once.returns(@database)
     catalog = ["test_repo"]
-    ::Proxy::ContainerGateway.expects(:catalog).with(@database, nil).returns(catalog)
+    @container_gateway_main.expects(:catalog).with(nil).returns(catalog)
     catalog.expects(:limit).returns(catalog)
     catalog.expects(:select_map).returns(catalog)
     header 'HTTP_USER_AGENT', 'notpodman'
@@ -194,8 +194,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   def test_catalog_unauthorized_token
     header "AUTHORIZATION", "Basic unauthorized"
     catalog = ["test_repo"]
-    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).returns(@database)
-    ::Proxy::ContainerGateway.expects(:catalog).with(@database).returns(catalog)
+    @container_gateway_main.expects(:catalog).returns(catalog)
     catalog.expects(:select_map).returns(catalog)
     get '/v2/_catalog'
     assert last_response.ok?
@@ -210,7 +209,6 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   end
 
   def test_token_basic_auth
-    ::Proxy::ContainerGateway::Api.any_instance.expects(:database).twice.returns(@database)
     ::Proxy::SETTINGS.foreman_url = 'https://foreman'
     foreman_response = {
       "token": "imarealtoken",

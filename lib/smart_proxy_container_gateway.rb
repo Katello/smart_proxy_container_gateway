@@ -1,3 +1,4 @@
 require 'smart_proxy_container_gateway/version'
 require 'smart_proxy_container_gateway/database'
 require 'smart_proxy_container_gateway/container_gateway'
+require 'smart_proxy_container_gateway/container_gateway_main'

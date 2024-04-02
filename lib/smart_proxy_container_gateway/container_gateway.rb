@@ -40,6 +40,9 @@ module Proxy
             )
           end
         end)
+        container_instance.singleton_dependency :container_gateway_main_impl, (lambda do
+          Proxy::ContainerGateway::ContainerGatewayMain.new
+        end)
       end
     end
   end

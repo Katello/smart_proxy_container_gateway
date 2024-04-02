@@ -19,15 +19,16 @@ module Proxy
       extend ::Proxy::ContainerGateway::DependencyInjection
 
       inject_attr :database_impl, :database
+      inject_attr :container_gateway_main_impl, :container_gateway_main
 
       get '/v1/_ping/?' do
-        Proxy::ContainerGateway.ping
+        container_gateway_main.ping
       end
 
       get '/v2/?' do
         if auth_header.present? && (auth_header.unauthorized_token? || auth_header.valid_user_token?)
           response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'
-          Proxy::ContainerGateway.ping
+          container_gateway_main.ping
         else
           redirect_authorization_headers
           halt 401, "unauthorized"
@@ -38,7 +39,7 @@ module Proxy
         repository = params[:splat][0]
         tag = params[:splat][1]
         handle_repo_auth(repository, auth_header, request)
-        redirection_location = Proxy::ContainerGateway.manifests(repository, tag)
+        redirection_location = container_gateway_main.manifests(repository, tag)
         redirect to(redirection_location)
       end
 
@@ -46,14 +47,14 @@ module Proxy
         repository = params[:splat][0]
         digest = params[:splat][1]
         handle_repo_auth(repository, auth_header, request)
-        redirection_location = Proxy::ContainerGateway.blobs(repository, digest)
+        redirection_location = container_gateway_main.blobs(repository, digest)
         redirect to(redirection_location)
       end
 
       get '/v2/*/tags/list/?' do
         repository = params[:splat][0]
         handle_repo_auth(repository, auth_header, request)
-        pulp_response = Proxy::ContainerGateway.tags(repository, params)
+        pulp_response = container_gateway_main.tags(repository, params)
         # "link"=>["<http://pulpcore-api/v2/container-image-name/tags/list?n=100&last=last-tag-name>; rel=\"next\""],
         # https://docs.docker.com/registry/spec/api/#pagination-1
         if pulp_response['link'].nil?
@@ -79,7 +80,7 @@ module Proxy
           end
           params[:user] = username
         end
-        repositories = Proxy::ContainerGateway.v1_search(database, params)
+        repositories = container_gateway_main.v1_search(params)
 
         content_type :json
         {
@@ -93,9 +94,9 @@ module Proxy
         catalog = []
         if auth_header.present?
           if auth_header.unauthorized_token?
-            catalog = Proxy::ContainerGateway.catalog(database).select_map(::Sequel[:repositories][:name])
+            catalog = container_gateway_main.catalog.select_map(::Sequel[:repositories][:name])
           elsif auth_header.valid_user_token?
-            catalog = Proxy::ContainerGateway.catalog(database, auth_header.user).select_map(::Sequel[:repositories][:name])
+            catalog = container_gateway_main.catalog(auth_header.user).select_map(::Sequel[:repositories][:name])
           else
             redirect_authorization_headers
             halt 401, "unauthorized"
@@ -106,7 +107,6 @@ module Proxy
         end
 
         content_type :json
-        logger.debug(catalog)
         { repositories: catalog }.to_json
       end
 
@@ -141,8 +141,7 @@ module Proxy
           expires_in = token_response_body.fetch("expires_in", 60)
           expires_at = token_issue_time + expires_in.seconds
 
-          ContainerGateway.insert_token(
-            database,
+          container_gateway_main.insert_token(
             request.params['account'],
             token_response_body['token'],
             expires_at.rfc3339
@@ -152,7 +151,7 @@ module Proxy
           if repo_response.code.to_i != 200
             halt repo_response.code.to_i, repo_response.body
           else
-            ContainerGateway.update_user_repositories(database, request.params['account'],
+            container_gateway_main.update_user_repositories(request.params['account'],
                                                       JSON.parse(repo_response.body)['repositories'])
           end
 
@@ -171,7 +170,7 @@ module Proxy
       put '/user_repository_mapping/?' do
         do_authorize_any
 
-        ContainerGateway.update_user_repo_mapping(database, params)
+        container_gateway_main.update_user_repo_mapping(params)
         {}
       end
 
@@ -179,7 +178,7 @@ module Proxy
         do_authorize_any
 
         repositories = params['repositories'].nil? ? [] : params['repositories']
-        ContainerGateway.update_repository_list(database, repositories)
+        container_gateway_main.update_repository_list(repositories)
         {}
       end
 
@@ -193,7 +192,7 @@ module Proxy
         end
         username = request.params['account'] if username.nil?
 
-        return if Proxy::ContainerGateway.authorized_for_repo?(database, repository, user_token_is_valid, username)
+        return if container_gateway_main.authorized_for_repo?(repository, user_token_is_valid, username)
 
         redirect_authorization_headers
         halt 401, "unauthorized"
@@ -214,6 +213,7 @@ module Proxy
         extend ::Proxy::ContainerGateway::DependencyInjection
 
         inject_attr :database_impl, :database
+        inject_attr :container_gateway_main_impl, :container_gateway_main
         UNAUTHORIZED_TOKEN = 'unauthorized'.freeze
 
         def initialize(value)
@@ -221,11 +221,11 @@ module Proxy
         end
 
         def user
-          ContainerGateway.token_user(database, @value.split(' ')[1])
+          container_gateway_main.token_user(@value.split(' ')[1])
         end
 
         def valid_user_token?
-          token_auth? && ContainerGateway.valid_token?(database, @value.split(' ')[1])
+          token_auth? && container_gateway_main.valid_token?(@value.split(' ')[1])
         end
 
         def raw_header
