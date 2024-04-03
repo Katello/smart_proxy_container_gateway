@@ -3,7 +3,7 @@ require 'webmock/test_unit'
 require 'rack/test'
 require 'mocha/test_unit'
 
-# rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+# rubocop:disable Metrics/MethodLength
 class ContainerGatewayApiTest < Test::Unit::TestCase
   include Rack::Test::Methods
 
@@ -12,7 +12,8 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
                                                      :katello_registry_path => '/v2/',
                                                      :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
                                                      :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
-                                                     :sqlite_db_path => 'container_gateway_test.db')
+                                                     :sqlite_db_path => 'container_gateway_test.db',
+                                                     :database_backend => 'sqlite')
   require 'smart_proxy_container_gateway/container_gateway_api'
   require 'smart_proxy_container_gateway/database'
 
@@ -24,10 +25,12 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     Proxy::ContainerGateway::Plugin.load_test_settings(:pulp_endpoint => 'https://test.example.com',
                                                        :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
                                                        :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
-                                                       :sqlite_db_path => 'container_gateway_test.db')
+                                                       :sqlite_db_path => 'container_gateway_test.db',
+                                                       :database_backend => 'sqlite')
     sqlite_db_path = Proxy::ContainerGateway::Plugin.settings[:sqlite_db_path]
     sqlite_timeout = Proxy::ContainerGateway::Plugin.settings[:sqlite_timeout]
-    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: sqlite_db_path, sqlite_timeout: sqlite_timeout)
+    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: sqlite_db_path,
+                                                      sqlite_timeout: sqlite_timeout, database_backend: 'sqlite')
     @container_gateway_main = Proxy::ContainerGateway::ContainerGatewayMain.new
     @container_gateway_main.stubs(:database).returns(@database)
     ::Proxy::ContainerGateway::Api.any_instance.stubs(:database).returns(@database)
@@ -230,4 +233,4 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal "imarealtoken", JSON.parse(last_response.body)["token"]
   end
 end
-# rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+# rubocop:enable Metrics/MethodLength

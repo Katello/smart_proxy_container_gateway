@@ -11,7 +11,8 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
   Proxy::ContainerGateway::Plugin.load_test_settings(:pulp_endpoint => 'https://test.example.com',
                                                      :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
                                                      :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
-                                                     :sqlite_db_path => 'container_gateway_test.db')
+                                                     :sqlite_db_path => 'container_gateway_test.db',
+                                                     :database_backend => 'sqlite')
   require 'smart_proxy_container_gateway/container_gateway_api'
   require 'smart_proxy_container_gateway/database'
 
@@ -23,10 +24,12 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
     Proxy::ContainerGateway::Plugin.load_test_settings(:pulp_endpoint => 'https://test.example.com',
                                                        :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
                                                        :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
-                                                       :sqlite_db_path => 'container_gateway_test.db')
+                                                       :sqlite_db_path => 'container_gateway_test.db',
+                                                       :database_backend => 'sqlite')
     sqlite_db_path = Proxy::ContainerGateway::Plugin.settings[:sqlite_db_path]
     sqlite_timeout = Proxy::ContainerGateway::Plugin.settings[:sqlite_timeout]
-    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: sqlite_db_path, sqlite_timeout: sqlite_timeout)
+    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: sqlite_db_path,
+                                                      sqlite_timeout: sqlite_timeout, database_backend: 'sqlite')
     @container_gateway_main = Proxy::ContainerGateway::ContainerGatewayMain.new
     @container_gateway_main.stubs(:database).returns(@database)
   end
@@ -44,7 +47,7 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
     @database.connection[:repositories_users].insert(%i[repository_id user_id], [repo[:id], user[:id]])
 
     @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true },
-                                                                 { 'repository' => 'test_repo2', 'auth_required' => false }])
+                                                    { 'repository' => 'test_repo2', 'auth_required' => false }])
     repo_list = @database.connection[:repositories].order(:name).all
     assert_equal 2, repo_list.count
     assert_equal 'test_repo1', repo_list.first[:name]
@@ -56,8 +59,8 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
 
   def test_v1_search_with_user
     @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true },
-                                               { 'repository' => 'test_repo2', 'auth_required' => false },
-                                               { 'repository' => 'test_repo3', 'auth_required' => true }])
+                                                    { 'repository' => 'test_repo2', 'auth_required' => false },
+                                                    { 'repository' => 'test_repo3', 'auth_required' => true }])
     user = ::Sequel::Model(@database.connection[:users]).create(name: 'foreman')
     repo1 = @database.connection[:repositories].where(name: 'test_repo1').first
     repo2 = @database.connection[:repositories].where(name: 'test_repo2').first
@@ -71,8 +74,8 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
 
   def test_v1_search_with_no_user
     @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true },
-                                               { 'repository' => 'test_repo2', 'auth_required' => false },
-                                               { 'repository' => 'test_repo3', 'auth_required' => true }])
+                                                    { 'repository' => 'test_repo2', 'auth_required' => false },
+                                                    { 'repository' => 'test_repo3', 'auth_required' => true }])
 
     repos_found = @container_gateway_main.v1_search
     assert_equal %w[test_repo2], repos_found
@@ -80,8 +83,8 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
 
   def test_v1_item_limit
     @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => false },
-                                               { 'repository' => 'test_repo2', 'auth_required' => false },
-                                               { 'repository' => 'test_repo3', 'auth_required' => false }])
+                                                    { 'repository' => 'test_repo2', 'auth_required' => false },
+                                                    { 'repository' => 'test_repo3', 'auth_required' => false }])
 
     repos_found = @container_gateway_main.v1_search(n: '1')
     assert_equal %w[test_repo1], repos_found
@@ -89,8 +92,8 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
 
   def test_catalog_user
     @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => false },
-                                               { 'repository' => 'test_repo2', 'auth_required' => true },
-                                               { 'repository' => 'test_repo3', 'auth_required' => true }])
+                                                    { 'repository' => 'test_repo2', 'auth_required' => true },
+                                                    { 'repository' => 'test_repo3', 'auth_required' => true }])
     user = ::Sequel::Model(@database.connection[:users]).create(name: 'foreman')
     repo = @database.connection[:repositories].first(name: 'test_repo2')
     @database.connection[:repositories_users].insert(%i[repository_id user_id], [repo[:id], user[:id]])
@@ -101,16 +104,16 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
 
   def test_catalog_no_user
     @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => false },
-                                               { 'repository' => 'test_repo2', 'auth_required' => true },
-                                               { 'repository' => 'test_repo3', 'auth_required' => false }])
+                                                    { 'repository' => 'test_repo2', 'auth_required' => true },
+                                                    { 'repository' => 'test_repo3', 'auth_required' => false }])
     assert_equal ['test_repo1', 'test_repo3'],
                  @container_gateway_main.catalog.select_map(::Sequel[:repositories][:name])
   end
 
   def test_authorized_for_repo_auth
     @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => false },
-                                               { 'repository' => 'test_repo2', 'auth_required' => true },
-                                               { 'repository' => 'test_repo3', 'auth_required' => false }])
+                                                    { 'repository' => 'test_repo2', 'auth_required' => true },
+                                                    { 'repository' => 'test_repo3', 'auth_required' => false }])
     user = ::Sequel::Model(@database.connection[:users]).create(name: 'foreman')
     repo = @database.connection[:repositories].first(name: 'test_repo2')
     @database.connection[:repositories_users].insert(%i[repository_id user_id], [repo[:id], user[:id]])
@@ -123,8 +126,8 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
 
   def test_authorized_for_repo_no_auth
     @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => false },
-                                               { 'repository' => 'test_repo2', 'auth_required' => true },
-                                               { 'repository' => 'test_repo3', 'auth_required' => false }])
+                                                    { 'repository' => 'test_repo2', 'auth_required' => true },
+                                                    { 'repository' => 'test_repo3', 'auth_required' => false }])
 
     assert_true @container_gateway_main.authorized_for_repo?('test_repo1', false)
     assert_false @container_gateway_main.authorized_for_repo?('test_repo2', false)
@@ -147,15 +150,15 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
   def test_expired_tokens_deleted
     @database.connection[:authentication_tokens].delete
     @container_gateway_main.insert_token('joe', 'myexpiredtoken',
-                                           DateTime.now - (1 / 24.0), clear_expired_tokens: false)
+                                         DateTime.now - (1 / 24.0), clear_expired_tokens: false)
 
     refute @container_gateway_main.valid_token?('mytoken')
   end
 
   def test_update_user_repo_mapping
     @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true },
-                                               { 'repository' => 'test_repo2', 'auth_required' => true },
-                                               { 'repository' => 'test_repo3', 'auth_required' => true }])
+                                                    { 'repository' => 'test_repo2', 'auth_required' => true },
+                                                    { 'repository' => 'test_repo3', 'auth_required' => true }])
     foreman_user = ::Sequel::Model(@database.connection[:users]).create(name: 'foreman')
     katello_user = ::Sequel::Model(@database.connection[:users]).create(name: 'katello')
     user_repo_maps = { 'users' => [{ 'foreman' => [{ 'repository' => 'test_repo1', 'auth_required' => true },
@@ -176,8 +179,8 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
 
   def test_update_user_repositories
     @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true },
-                                               { 'repository' => 'test_repo2', 'auth_required' => true },
-                                               { 'repository' => 'test_repo3', 'auth_required' => true }])
+                                                    { 'repository' => 'test_repo2', 'auth_required' => true },
+                                                    { 'repository' => 'test_repo3', 'auth_required' => true }])
     user = ::Sequel::Model(@database.connection[:users]).create(name: 'foreman')
     @container_gateway_main.update_user_repositories('foreman', ['test_repo1', 'test_repo2', 'test_repo3'])
 

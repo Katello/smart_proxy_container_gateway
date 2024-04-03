@@ -29,16 +29,10 @@ module Proxy
 
       load_dependency_injection_wirings do |container_instance, settings|
         container_instance.singleton_dependency :database_impl, (lambda do
-          if settings[:database_backend] == 'sqlite'
-            Proxy::ContainerGateway::Database.new(
-              sqlite_db_path: settings[:sqlite_db_path], sqlite_timeout: settings[:sqlite_timeout]
-            )
-          else
-            Proxy::ContainerGateway::Database.new(
-              postgres_host: settings[:postgres_host], postgres_user: settings[:postgres_user],
-              postgres_database: settings[:postgres_database], postgres_password: settings[:postgres_password]
-            )
-          end
+          Proxy::ContainerGateway::Database.new(
+            database_backend: settings[:database_backend], sqlite_db_path: settings[:sqlite_db_path],
+            sqlite_timeout: settings[:sqlite_timeout], postgresql_connection_string: settings[:postgresql_connection_string]
+          )
         end)
         container_instance.singleton_dependency :container_gateway_main_impl, (lambda do
           Proxy::ContainerGateway::ContainerGatewayMain.new

@@ -8,13 +8,14 @@ module Proxy
     extend ::Proxy::Log
 
     class ContainerGatewayMain
-      #extend ::Proxy::ContainerGateway::DependencyInjection
+      # extend ::Proxy::ContainerGateway::DependencyInjection
 
-      #inject_attr :database_impl, :database
+      # inject_attr :database_impl, :database
 
       # TODO: make this method unnecessary by figuring out why container_instance is nil during dependency injection.
       def database
-        @database ||= ::Proxy::Plugins.instance.find { |p| p[:name] == :container_gateway }[:di_container].get_dependency(:database_impl)
+        @database ||= ::Proxy::Plugins.instance.
+                      find { |p| p[:name] == :container_gateway }[:di_container].get_dependency(:database_impl)
       end
 
       def pulp_registry_request(uri)

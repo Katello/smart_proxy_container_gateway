@@ -152,7 +152,7 @@ module Proxy
             halt repo_response.code.to_i, repo_response.body
           else
             container_gateway_main.update_user_repositories(request.params['account'],
-                                                      JSON.parse(repo_response.body)['repositories'])
+                                                            JSON.parse(repo_response.body)['repositories'])
           end
 
           # Return the original token response from Katello
