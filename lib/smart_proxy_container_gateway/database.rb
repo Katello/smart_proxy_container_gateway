@@ -11,10 +11,12 @@ module Proxy
           @connection.run("PRAGMA journal_mode = wal;")
         else
           unless options[:postgresql_connection_string]
-            fail ArgumentError, 'PostgreSQL connection string is required'
+            raise ArgumentError, 'PostgreSQL connection string is required'
           end
+
           @connection = Sequel.connect(options[:postgresql_connection_string])
-          if File.exist?(options[:sqlite_db_path]) && @connection[:repositories].count.zero?
+          if File.exist?(options[:sqlite_db_path]) &&
+             (!@connection.table_exists?(:repositories) || @connection[:repositories].count.zero?)
             migrate_to_postgres(Sequel.sqlite(options[:sqlite_db_path]), @connection)
             File.delete(options[:sqlite_db_path])
           end
@@ -35,9 +37,11 @@ module Proxy
       end
 
       def migrate_to_postgres(sqlite_db, postgres_db)
+        migrate
         sqlite_db.transaction do
           sqlite_db.tables.each do |table|
-            skip if table == :schema_info
+            next if table == :schema_info
+
             sqlite_db[table].each do |row|
               postgres_db[table.to_sym].insert(row)
             end

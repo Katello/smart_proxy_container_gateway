@@ -35,7 +35,10 @@ module Proxy
           )
         end)
         container_instance.singleton_dependency :container_gateway_main_impl, (lambda do
-          Proxy::ContainerGateway::ContainerGatewayMain.new
+          Proxy::ContainerGateway::ContainerGatewayMain.new(
+            database: container_instance.get_dependency(:database_impl),
+            **settings.slice(:pulp_endpoint, :pulp_client_ssl_ca, :pulp_client_ssl_cert, :pulp_client_ssl_key)
+          )
         end)
       end
     end

@@ -2,27 +2,30 @@ require 'net/http'
 require 'uri'
 require 'digest'
 require 'smart_proxy_container_gateway/dependency_injection'
+require 'sequel'
 module Proxy
   module ContainerGateway
     extend ::Proxy::Util
     extend ::Proxy::Log
 
     class ContainerGatewayMain
-      # extend ::Proxy::ContainerGateway::DependencyInjection
+      attr_reader :database
 
-      # inject_attr :database_impl, :database
-
-      # TODO: make this method unnecessary by figuring out why container_instance is nil during dependency injection.
-      def database
-        @database ||= ::Proxy::Plugins.instance.
-                      find { |p| p[:name] == :container_gateway }[:di_container].get_dependency(:database_impl)
+      def initialize(database:, pulp_endpoint:, pulp_client_ssl_ca:, pulp_client_ssl_cert:, pulp_client_ssl_key:)
+        @database = database
+        @pulp_endpoint = pulp_endpoint
+        @pulp_client_ssl_ca = pulp_client_ssl_ca
+        @pulp_client_ssl_cert = OpenSSL::X509::Certificate.new(File.read(pulp_client_ssl_cert))
+        @pulp_client_ssl_key = OpenSSL::PKey::RSA.new(
+          File.read(pulp_client_ssl_key)
+        )
       end
 
       def pulp_registry_request(uri)
         http_client = Net::HTTP.new(uri.host, uri.port)
-        http_client.ca_file = pulp_ca
-        http_client.cert = pulp_cert
-        http_client.key = pulp_key
+        http_client.ca_file = @pulp_client_ssl_ca
+        http_client.cert = @pulp_client_ssl_cert
+        http_client.key = @pulp_client_ssl_key
         http_client.use_ssl = true
 
         http_client.start do |http|
@@ -32,20 +35,20 @@ module Proxy
       end
 
       def ping
-        uri = URI.parse("#{Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/")
+        uri = URI.parse("#{@pulp_endpoint}/pulpcore_registry/v2/")
         pulp_registry_request(uri).body
       end
 
       def manifests(repository, tag)
         uri = URI.parse(
-          "#{Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/#{repository}/manifests/#{tag}"
+          "#{@pulp_endpoint}/pulpcore_registry/v2/#{repository}/manifests/#{tag}"
         )
         pulp_registry_request(uri)['location']
       end
 
       def blobs(repository, digest)
         uri = URI.parse(
-          "#{Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/#{repository}/blobs/#{digest}"
+          "#{@pulp_endpoint}/pulpcore_registry/v2/#{repository}/blobs/#{digest}"
         )
         pulp_registry_request(uri)['location']
       end
@@ -59,7 +62,7 @@ module Proxy
         query = "#{query}last=#{params[:last]}" unless params[:last].nil? || params[:last] == ""
 
         uri = URI.parse(
-          "#{Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/v2/#{repository}/tags/list#{query}"
+          "#{@pulp_endpoint}/pulpcore_registry/v2/#{repository}/tags/list#{query}"
         )
         pulp_registry_request(uri)
       end
@@ -198,20 +201,6 @@ module Proxy
       end
 
       private
-
-      def pulp_ca
-        Proxy::ContainerGateway::Plugin.settings.pulp_client_ssl_ca
-      end
-
-      def pulp_cert
-        OpenSSL::X509::Certificate.new(File.read(Proxy::ContainerGateway::Plugin.settings.pulp_client_ssl_cert))
-      end
-
-      def pulp_key
-        OpenSSL::PKey::RSA.new(
-          File.read(Proxy::ContainerGateway::Plugin.settings.pulp_client_ssl_key)
-        )
-      end
 
       def checksum(token)
         Digest::SHA256.hexdigest(token)

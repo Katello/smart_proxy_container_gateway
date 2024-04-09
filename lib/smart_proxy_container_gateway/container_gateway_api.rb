@@ -6,9 +6,6 @@ require 'sinatra'
 require 'smart_proxy_container_gateway/container_gateway'
 require 'smart_proxy_container_gateway/container_gateway_main'
 require 'smart_proxy_container_gateway/foreman_api'
-require 'smart_proxy_container_gateway/dependency_injection'
-require 'sqlite3'
-require 'sequel'
 
 module Proxy
   module ContainerGateway
