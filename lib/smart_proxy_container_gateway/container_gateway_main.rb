@@ -192,12 +192,14 @@ module Proxy
         checksum = Digest::SHA256.hexdigest(token)
         user = Sequel::Model(database.connection[:users]).find_or_create(name: username)
 
-        database.connection[:authentication_tokens].where(:token_checksum => checksum).delete
-        Sequel::Model(database.connection[:authentication_tokens]).
-          create(token_checksum: checksum, expire_at: expire_at_string.to_s, user_id: user.id)
-        return unless clear_expired_tokens
+        database.connection.transaction(isolation: :serializable, retry_on: [Sequel::SerializationFailure]) do
+          database.connection[:authentication_tokens].where(:token_checksum => checksum).delete
+          Sequel::Model(database.connection[:authentication_tokens]).
+            create(token_checksum: checksum, expire_at: expire_at_string.to_s, user_id: user.id)
+          return unless clear_expired_tokens
 
-        database.connection[:authentication_tokens].where { expire_at < Sequel::CURRENT_TIMESTAMP }.delete
+          database.connection[:authentication_tokens].where { expire_at < Sequel::CURRENT_TIMESTAMP }.delete
+        end
       end
 
       private
