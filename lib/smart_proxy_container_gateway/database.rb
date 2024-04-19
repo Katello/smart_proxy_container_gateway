@@ -4,22 +4,15 @@ module Proxy
     class Database
       attr_reader :connection
 
-      def initialize(options = {})
-        if options[:database_backend] == 'sqlite'
-          @connection = Sequel.connect("sqlite://#{options[:sqlite_db_path]}", timeout: options[:sqlite_timeout])
+      def initialize(connection_string, prior_sqlite_db_path = nil)
+        @connection = Sequel.connect(connection_string)
+        if connection_string.start_with?('sqlite://')
           @connection.run("PRAGMA foreign_keys = ON;")
           @connection.run("PRAGMA journal_mode = wal;")
-        else
-          unless options[:postgresql_connection_string]
-            raise ArgumentError, 'PostgreSQL connection string is required'
-          end
-
-          @connection = Sequel.connect(options[:postgresql_connection_string])
-          if File.exist?(options[:sqlite_db_path]) &&
-             (!@connection.table_exists?(:repositories) || @connection[:repositories].count.zero?)
-            migrate_to_postgres(Sequel.sqlite(options[:sqlite_db_path]), @connection)
-            File.delete(options[:sqlite_db_path])
-          end
+        elsif prior_sqlite_db_path && File.exist?(prior_sqlite_db_path) &&
+              (!@connection.table_exists?(:repositories) || @connection[:repositories].count.zero?)
+          migrate_to_postgres(Sequel.sqlite(prior_sqlite_db_path), @connection)
+          File.delete(prior_sqlite_db_path)
         end
         migrate
       end

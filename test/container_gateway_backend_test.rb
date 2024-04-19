@@ -8,21 +8,13 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
   require 'smart_proxy_container_gateway/database'
 
   def setup
-    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: 'container_gateway_test.db',
-                                                      sqlite_timeout: 30_000, database_backend: 'sqlite')
+    @database = Proxy::ContainerGateway::Database.new('sqlite://')
     @container_gateway_main = Proxy::ContainerGateway::ContainerGatewayMain.new(
       database: @database, pulp_endpoint: 'https://test.example.com',
       pulp_client_ssl_ca: "#{__dir__}/fixtures/mock_pulp_ca.pem",
       pulp_client_ssl_cert: "#{__dir__}/fixtures/mock_pulp_client.crt",
       pulp_client_ssl_key: "#{__dir__}/fixtures/mock_pulp_client.key"
     )
-  end
-
-  def teardown
-    @database.connection[:authentication_tokens].delete
-    @database.connection[:repositories_users].delete
-    @database.connection[:users].delete
-    @database.connection[:repositories].delete
   end
 
   def test_update_repository_list

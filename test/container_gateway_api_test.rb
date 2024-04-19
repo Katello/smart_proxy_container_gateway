@@ -22,10 +22,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
                                                        :sqlite_db_path => 'container_gateway_test.db',
                                                        :database_backend => 'sqlite')
     settings = Proxy::ContainerGateway::Plugin.settings
-    sqlite_db_path = settings[:sqlite_db_path]
-    sqlite_timeout = settings[:sqlite_timeout]
-    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: sqlite_db_path,
-                                                      sqlite_timeout: sqlite_timeout, database_backend: 'sqlite')
+    @database = Proxy::ContainerGateway::Database.new("sqlite://#{settings[:sqlite_db_path]}?timeout=#{settings[:sqlite_timeout]}")
     @container_gateway_main = Proxy::ContainerGateway::ContainerGatewayMain.new(
       database: @database, pulp_endpoint: settings[:pulp_endpoint],
       pulp_client_ssl_ca: settings[:pulp_client_ssl_ca],
