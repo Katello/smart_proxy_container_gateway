@@ -7,8 +7,6 @@ module Proxy
 
       default_settings :pulp_endpoint => "https://#{`hostname`.strip}",
                        :katello_registry_path => '/v2/',
-                       :database_backend => 'sqlite',
-                       :sqlite_db_path => '/var/lib/foreman-proxy/smart_proxy_container_gateway.db',
                        :sqlite_timeout => 30_000
 
       # Load defaults that copy values from SETTINGS. This is done as
@@ -29,10 +27,13 @@ module Proxy
 
       load_dependency_injection_wirings do |container_instance, settings|
         container_instance.singleton_dependency :database_impl, (lambda do
-          if settings[:database_backend] == 'sqlite'
-            connection_string = "sqlite://#{settings[:sqlite_db_path]}?timeout=#{settings[:sqlite_timeout]}"
-          else
-            connection_string = settings[:postgresql_connection_string]
+          connection_string = settings.fetch(:db_connection_string) do
+            unless settings[:sqlite_db_path]
+              raise ValueError, 'Missing db_connection_string or sqlite_db_path option'
+            end
+
+            # Legacy setup
+            "sqlite://#{settings[:sqlite_db_path]}?timeout=#{settings[:sqlite_timeout]}"
           end
 
           Proxy::ContainerGateway::Database.new(connection_string, settings[:sqlite_db_path])

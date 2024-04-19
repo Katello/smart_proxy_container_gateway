@@ -19,10 +19,9 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
                                                        :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
                                                        :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
                                                        :pulp_client_ssl_ca => "#{__dir__}/fixtures/mock_pulp_ca.pem",
-                                                       :sqlite_db_path => 'container_gateway_test.db',
-                                                       :database_backend => 'sqlite')
+                                                       :connection_string => 'sqlite://')
     settings = Proxy::ContainerGateway::Plugin.settings
-    @database = Proxy::ContainerGateway::Database.new("sqlite://#{settings[:sqlite_db_path]}?timeout=#{settings[:sqlite_timeout]}")
+    @database = Proxy::ContainerGateway::Database.new(settings[:connection_string])
     @container_gateway_main = Proxy::ContainerGateway::ContainerGatewayMain.new(
       database: @database, pulp_endpoint: settings[:pulp_endpoint],
       pulp_client_ssl_ca: settings[:pulp_client_ssl_ca],
