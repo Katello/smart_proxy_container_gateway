@@ -1,10 +1,16 @@
 ---
 :enabled: true
-:pulp_endpoint: 'https://your_pulp_3_server_here.com'
-:pulp_client_ssl_ca: 'CA Cert for authenticating with Pulp'
-:pulp_client_ssl_cert: 'X509 certificate for authenticating with Pulp'
-:pulp_client_ssl_key: 'RSA private key for the Pulp certificate'
-:katello_registry_path: 'Katello container registry suffix, e.g., /v2/'
-:sqlite_db_path: '/var/lib/foreman-proxy/smart_proxy_container_gateway.db'
+
+#:pulp_endpoint: 'https://pulp3.example.com'
+#:pulp_client_ssl_ca: '/path/to/ca.pem'
+#:pulp_client_ssl_cert: '/path/to/cert.pem'
+#:pulp_client_ssl_key: '/path/to/key.pem'
+
+#:katello_registry_path: '/v2/'
+
+#:db_connection_string: postgresql:///container_gateway
+
+# Legacy options
+#:sqlite_db_path: '/var/lib/foreman-proxy/smart_proxy_container_gateway.db'
 # Database busy timeout in milliseconds
-:sqlite_timeout: 30000
+#:sqlite_timeout: 30000

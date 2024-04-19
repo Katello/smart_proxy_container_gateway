@@ -38,9 +38,8 @@ The Container Gateway plugin requires a Pulp 3 instance to connect to.  Related 
 SQLite and PostgreSQL are supported, with SQLite being the default for development and testing.
 Use PostgreSQL in production for improved performance by adding the following settings:
 ```
-# Example PostgreSQL connection settings (default port is 5432)
-:database_backend: postgresql
-:postgresql_connection_string: postgres://foreman-proxy:changeme@localhost:5432/container_gateway
+# Example PostgreSQL connection settings, using UNIX socket and ident auth
+:db_connection_string: postgres:///container_gateway
 ```
 
 When switching from SQLite to PostgreSQL, if the PostgreSQL database is empty, the SQLite database will be automatically migrated to PostgreSQL.
