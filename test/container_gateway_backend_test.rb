@@ -1,43 +1,20 @@
 require 'test_helper'
-require 'webmock/test_unit'
-require 'rack/test'
 require 'mocha/test_unit'
 
 # rubocop:disable Metrics/AbcSize
 class ContainerGatewayBackendTest < Test::Unit::TestCase
-  include Rack::Test::Methods
-
   require 'smart_proxy_container_gateway/container_gateway'
-  Proxy::ContainerGateway::Plugin.load_test_settings(:pulp_endpoint => 'https://test.example.com',
-                                                     :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
-                                                     :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
-                                                     :pulp_client_ssl_ca => "#{__dir__}/fixtures/mock_pulp_ca.pem",
-                                                     :sqlite_db_path => 'container_gateway_test.db',
-                                                     :database_backend => 'sqlite')
   require 'smart_proxy_container_gateway/container_gateway_api'
   require 'smart_proxy_container_gateway/database'
 
-  def app
-    Proxy::ContainerGateway::Api.new
-  end
-
   def setup
-    Proxy::ContainerGateway::Plugin.load_test_settings(:pulp_endpoint => 'https://test.example.com',
-                                                       :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
-                                                       :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
-                                                       :pulp_client_ssl_ca => "#{__dir__}/fixtures/mock_pulp_ca.pem",
-                                                       :sqlite_db_path => 'container_gateway_test.db',
-                                                       :database_backend => 'sqlite')
-    settings = Proxy::ContainerGateway::Plugin.settings
-    sqlite_db_path = settings[:sqlite_db_path]
-    sqlite_timeout = settings[:sqlite_timeout]
-    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: sqlite_db_path,
-                                                      sqlite_timeout: sqlite_timeout, database_backend: 'sqlite')
+    @database = Proxy::ContainerGateway::Database.new(sqlite_db_path: 'container_gateway_test.db',
+                                                      sqlite_timeout: 30_000, database_backend: 'sqlite')
     @container_gateway_main = Proxy::ContainerGateway::ContainerGatewayMain.new(
-      database: @database, pulp_endpoint: settings[:pulp_endpoint],
-      pulp_client_ssl_ca: settings[:pulp_client_ssl_ca],
-      pulp_client_ssl_cert: settings[:pulp_client_ssl_cert],
-      pulp_client_ssl_key: settings[:pulp_client_ssl_key]
+      database: @database, pulp_endpoint: 'https://test.example.com',
+      pulp_client_ssl_ca: "#{__dir__}/fixtures/mock_pulp_ca.pem",
+      pulp_client_ssl_cert: "#{__dir__}/fixtures/mock_pulp_client.crt",
+      pulp_client_ssl_key: "#{__dir__}/fixtures/mock_pulp_client.key"
     )
   end
 
