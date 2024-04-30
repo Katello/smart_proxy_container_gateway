@@ -39,21 +39,21 @@ module Proxy
 
       def ping(headers)
         uri = URI.parse("#{@pulp_endpoint}/pulpcore_registry/v2/")
-        pulp_registry_request(uri, headers).body
+        pulp_registry_request(uri, headers)
       end
 
       def manifests(repository, tag, headers)
         uri = URI.parse(
           "#{@pulp_endpoint}/pulpcore_registry/v2/#{repository}/manifests/#{tag}"
         )
-        pulp_registry_request(uri, headers)['location']
+        pulp_registry_request(uri, headers)
       end
 
       def blobs(repository, digest, headers)
         uri = URI.parse(
           "#{@pulp_endpoint}/pulpcore_registry/v2/#{repository}/blobs/#{digest}"
         )
-        pulp_registry_request(uri, headers)['location']
+        pulp_registry_request(uri, headers)
       end
 
       def tags(repository, headers, params = {})

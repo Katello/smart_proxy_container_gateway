@@ -19,13 +19,17 @@ module Proxy
       inject_attr :container_gateway_main_impl, :container_gateway_main
 
       get '/v1/_ping/?' do
-        container_gateway_main.ping(translated_headers_for_proxy)
+        pulp_response = container_gateway_main.ping(translated_headers_for_proxy)
+        status pulp_response.code.to_i
+        body pulp_response.body
       end
 
       get '/v2/?' do
         if auth_header.present? && (auth_header.unauthorized_token? || auth_header.valid_user_token?)
           response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'
-          container_gateway_main.ping(translated_headers_for_proxy)
+          pulp_response = container_gateway_main.ping(translated_headers_for_proxy)
+          status pulp_response.code.to_i
+          body pulp_response.body
         else
           redirect_authorization_headers
           halt 401, "unauthorized"
@@ -36,16 +40,28 @@ module Proxy
         repository = params[:splat][0]
         tag = params[:splat][1]
         handle_repo_auth(repository, auth_header, request)
-        redirection_location = container_gateway_main.manifests(repository, tag, translated_headers_for_proxy)
-        redirect to(redirection_location)
+        pulp_response = container_gateway_main.manifests(repository, tag, translated_headers_for_proxy)
+        if pulp_response.code.to_i >= 400
+          status pulp_response.code.to_i
+          body pulp_response.body
+        else
+          redirection_location = pulp_response['location']
+          redirect to(redirection_location)
+        end
       end
 
       get '/v2/*/blobs/*/?' do
         repository = params[:splat][0]
         digest = params[:splat][1]
         handle_repo_auth(repository, auth_header, request)
-        redirection_location = container_gateway_main.blobs(repository, digest, translated_headers_for_proxy)
-        redirect to(redirection_location)
+        pulp_response = container_gateway_main.blobs(repository, digest, translated_headers_for_proxy)
+        if pulp_response.code.to_i >= 400
+          status pulp_response.code.to_i
+          body pulp_response.body
+        else
+          redirection_location = pulp_response['location']
+          redirect to(redirection_location)
+        end
       end
 
       get '/v2/*/tags/list/?' do
@@ -59,7 +75,8 @@ module Proxy
         else
           headers['link'] = pulp_response['link']
         end
-        pulp_response.body
+        status pulp_response.code.to_i
+        body pulp_response.body
       end
 
       get '/v1/search/?' do
@@ -187,7 +204,7 @@ module Proxy
           key.match("^HTTP_.*")
         end
         env.each do |header|
-          current_headers[header[0].split('_')[1..-1].join('-')] = header[1]
+          current_headers[header[0].split('_')[1..].join('-')] = header[1]
         end
         current_headers
       end
