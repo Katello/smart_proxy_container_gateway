@@ -19,13 +19,13 @@ module Proxy
       inject_attr :container_gateway_main_impl, :container_gateway_main
 
       get '/v1/_ping/?' do
-        container_gateway_main.ping
+        container_gateway_main.ping(translated_headers_for_proxy)
       end
 
       get '/v2/?' do
         if auth_header.present? && (auth_header.unauthorized_token? || auth_header.valid_user_token?)
           response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'
-          container_gateway_main.ping
+          container_gateway_main.ping(translated_headers_for_proxy)
         else
           redirect_authorization_headers
           halt 401, "unauthorized"
@@ -36,7 +36,7 @@ module Proxy
         repository = params[:splat][0]
         tag = params[:splat][1]
         handle_repo_auth(repository, auth_header, request)
-        redirection_location = container_gateway_main.manifests(repository, tag)
+        redirection_location = container_gateway_main.manifests(repository, tag, translated_headers_for_proxy)
         redirect to(redirection_location)
       end
 
@@ -44,14 +44,14 @@ module Proxy
         repository = params[:splat][0]
         digest = params[:splat][1]
         handle_repo_auth(repository, auth_header, request)
-        redirection_location = container_gateway_main.blobs(repository, digest)
+        redirection_location = container_gateway_main.blobs(repository, digest, translated_headers_for_proxy)
         redirect to(redirection_location)
       end
 
       get '/v2/*/tags/list/?' do
         repository = params[:splat][0]
         handle_repo_auth(repository, auth_header, request)
-        pulp_response = container_gateway_main.tags(repository, params)
+        pulp_response = container_gateway_main.tags(repository, translated_headers_for_proxy, params)
         # "link"=>["<http://pulpcore-api/v2/container-image-name/tags/list?n=100&last=last-tag-name>; rel=\"next\""],
         # https://docs.docker.com/registry/spec/api/#pagination-1
         if pulp_response['link'].nil?
@@ -180,6 +180,17 @@ module Proxy
       end
 
       private
+
+      def translated_headers_for_proxy
+        current_headers = {}
+        env = request.env.select do |key, _value|
+          key.match("^HTTP_.*")
+        end
+        env.each do |header|
+          current_headers[header[0].split('_')[1..-1].join('-')] = header[1]
+        end
+        current_headers
+      end
 
       def handle_repo_auth(repository, auth_header, request)
         user_token_is_valid = false

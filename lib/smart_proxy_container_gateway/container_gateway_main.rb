@@ -21,7 +21,7 @@ module Proxy
         )
       end
 
-      def pulp_registry_request(uri)
+      def pulp_registry_request(uri, headers)
         http_client = Net::HTTP.new(uri.host, uri.port)
         http_client.ca_file = @pulp_client_ssl_ca
         http_client.cert = @pulp_client_ssl_cert
@@ -30,30 +30,33 @@ module Proxy
 
         http_client.start do |http|
           request = Net::HTTP::Get.new uri
+          headers.each do |key, value|
+            request[key] = value
+          end
           http.request request
         end
       end
 
-      def ping
+      def ping(headers)
         uri = URI.parse("#{@pulp_endpoint}/pulpcore_registry/v2/")
-        pulp_registry_request(uri).body
+        pulp_registry_request(uri, headers).body
       end
 
-      def manifests(repository, tag)
+      def manifests(repository, tag, headers)
         uri = URI.parse(
           "#{@pulp_endpoint}/pulpcore_registry/v2/#{repository}/manifests/#{tag}"
         )
-        pulp_registry_request(uri)['location']
+        pulp_registry_request(uri, headers)['location']
       end
 
-      def blobs(repository, digest)
+      def blobs(repository, digest, headers)
         uri = URI.parse(
           "#{@pulp_endpoint}/pulpcore_registry/v2/#{repository}/blobs/#{digest}"
         )
-        pulp_registry_request(uri)['location']
+        pulp_registry_request(uri, headers)['location']
       end
 
-      def tags(repository, params = {})
+      def tags(repository, headers, params = {})
         query = "?"
         unless params[:n].nil? || params[:n] == ""
           query = "#{query}n=#{params[:n]}"
@@ -64,7 +67,7 @@ module Proxy
         uri = URI.parse(
           "#{@pulp_endpoint}/pulpcore_registry/v2/#{repository}/tags/list#{query}"
         )
-        pulp_registry_request(uri)
+        pulp_registry_request(uri, headers)
       end
 
       def v1_search(params = {})
