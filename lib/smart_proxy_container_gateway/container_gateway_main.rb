@@ -160,6 +160,9 @@ module Proxy
         end
       end
 
+      # Returns:
+      # true if the user is authorized to access the repo, or
+      # false if the user is not authorized to access the repo or if it does not exist
       def authorized_for_repo?(repo_name, user_token_is_valid, username = nil)
         repository = database.connection[:repositories][{ name: repo_name }]
 
