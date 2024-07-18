@@ -133,16 +133,57 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal('', last_response.body)
   end
 
+  def test_redirects_blob_head_request
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_repo_auth).returns({})
+    redirect_headers = { 'location' => "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                                       "/pulp/container/library/test_repo/blobs/test_digest?validate_token=test_token" }
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                       "/pulpcore_registry/v2/library/test_repo/blobs/test_digest").
+      to_return(:status => 302, :body => '', :headers => redirect_headers)
+
+    head '/v2/library/test_repo/blobs/test_digest'
+    assert last_response.redirect?, "Last response was not a redirect: #{last_response.body}"
+    assert_equal('', last_response.body)
+  end
+
   def test_unauthorized_for_manifests
     @container_gateway_main.expects(:authorized_for_repo?).returns(false)
     get '/v2/test_repo/manifests/test_tag'
-    assert_equal 401, last_response.status
+    assert_equal 404, last_response.status
   end
 
   def test_unauthorized_for_blobs
     @container_gateway_main.expects(:authorized_for_repo?).returns(false)
     get '/v2/test_repo/blobs/test_digest'
-    assert_equal 401, last_response.status
+    assert_equal 404, last_response.status
+  end
+
+  def test_put_manifests
+    put '/v2/library/test_repo/manifests/test_tag'
+    assert_equal 404, last_response.status
+    assert_equal({ "errors" => [{ "code" => "UNSUPPORTED", "message" => "Pushing content is unsupported" }] },
+                 JSON.parse(last_response.body))
+  end
+
+  def test_post_blob_uploads
+    post '/v2/library/test_repo/blobs/uploads/'
+    assert_equal 404, last_response.status
+    assert_equal({ "errors" => [{ "code" => "UNSUPPORTED", "message" => "Pushing content is unsupported" }] },
+                 JSON.parse(last_response.body))
+  end
+
+  def test_put_blob_uploads
+    put '/v2/library/test_repo/blobs/uploads/test_digest'
+    assert_equal 404, last_response.status
+    assert_equal({ "errors" => [{ "code" => "UNSUPPORTED", "message" => "Pushing content is unsupported" }] },
+                 JSON.parse(last_response.body))
+  end
+
+  def test_patch_blob_uploads
+    put '/v2/library/test_repo/blobs/uploads/test_digest'
+    assert_equal 404, last_response.status
+    assert_equal({ "errors" => [{ "code" => "UNSUPPORTED", "message" => "Pushing content is unsupported" }] },
+                 JSON.parse(last_response.body))
   end
 
   def test_put_repository_list

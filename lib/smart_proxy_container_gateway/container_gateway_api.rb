@@ -50,18 +50,28 @@ module Proxy
         end
       end
 
+      put '/v2/*/manifests/*/?' do
+        throw_unsupported_error
+      end
+
       get '/v2/*/blobs/*/?' do
-        repository = params[:splat][0]
-        digest = params[:splat][1]
-        handle_repo_auth(repository, auth_header, request)
-        pulp_response = container_gateway_main.blobs(repository, digest, translated_headers_for_proxy)
-        if pulp_response.code.to_i >= 400
-          status pulp_response.code.to_i
-          body pulp_response.body
-        else
-          redirection_location = pulp_response['location']
-          redirect to(redirection_location)
-        end
+        head_or_get_blobs
+      end
+
+      head '/v2/*/blobs/*/?' do
+        head_or_get_blobs
+      end
+
+      post '/v2/*/blobs/uploads/?' do
+        throw_unsupported_error
+      end
+
+      put '/v2/*/blobs/uploads/*/?' do
+        throw_unsupported_error
+      end
+
+      patch '/v2/*/blobs/uploads/*/?' do
+        throw_unsupported_error
       end
 
       get '/v2/*/tags/list/?' do
@@ -198,6 +208,46 @@ module Proxy
 
       private
 
+      def head_or_get_blobs
+        repository = params[:splat][0]
+        digest = params[:splat][1]
+        handle_repo_auth(repository, auth_header, request)
+        pulp_response = container_gateway_main.blobs(repository, digest, translated_headers_for_proxy)
+        if pulp_response.code.to_i >= 400
+          status pulp_response.code.to_i
+          body pulp_response.body
+        else
+          redirection_location = pulp_response['location']
+          redirect to(redirection_location)
+        end
+      end
+
+      def throw_unsupported_error
+        content_type :json
+        body({
+          "errors" => [
+            {
+              "code" => "UNSUPPORTED",
+              "message" => "Pushing content is unsupported"
+            }
+          ]
+        }.to_json)
+        halt 404
+      end
+
+      def throw_repo_not_found_error
+        content_type :json
+        body({
+          "errors" => [
+            {
+              "code" => "NAME_UNKNOWN",
+              "message" => "Repository name unknown"
+            }
+          ]
+        }.to_json)
+        halt 404
+      end
+
       def translated_headers_for_proxy
         current_headers = {}
         env = request.env.select do |key, _value|
@@ -220,7 +270,7 @@ module Proxy
         return if container_gateway_main.authorized_for_repo?(repository, user_token_is_valid, username)
 
         redirect_authorization_headers
-        halt 401, "unauthorized"
+        throw_repo_not_found_error
       end
 
       def redirect_authorization_headers
