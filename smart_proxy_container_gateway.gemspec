@@ -15,8 +15,8 @@ Gem::Specification.new do |s|
   s.license = 'GPL-3.0-only'
 
   s.required_ruby_version = '>= 2.7'
-  s.add_dependency 'activesupport'
-  s.add_dependency 'pg'
-  s.add_dependency 'sequel'
-  s.add_dependency 'sqlite3'
+  s.add_dependency 'activesupport', '>= 6.1', '< 8'
+  s.add_dependency 'pg', '~> 1.5'
+  s.add_dependency 'sequel', '~> 5.0'
+  s.add_dependency 'sqlite3', '~> 1.4'
 end
