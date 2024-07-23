@@ -5,7 +5,7 @@ Gem::Specification.new do |s|
   s.version = Proxy::ContainerGateway::VERSION
 
   s.summary = 'Pulp 3 container registry support for Foreman/Katello Smart-Proxy'
-  s.description = 'Pulp 3 container registry support for Foreman/Katello Smart-Proxy'
+  s.description = 'Foreman Smart Proxy plug-in for Pulp 3 container registry support'
   s.authors = ['Ian Ballou']
   s.email = 'ianballou67@gmail.com'
   s.extra_rdoc_files = ['README.md', 'LICENSE']
