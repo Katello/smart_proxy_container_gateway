@@ -21,3 +21,5 @@ jobs:
     name: Tests
     needs: rubocop
     uses: theforeman/actions/.github/workflows/smart_proxy_plugin.yml@proxy_plugin
+    with:
+      foreman_proxy_version: 'enter-the-matrix'
