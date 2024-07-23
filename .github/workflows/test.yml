@@ -1,4 +1,4 @@
-name: Test
+name: CI
 
 on:
   push:
@@ -6,23 +6,18 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: ${{ github.ref_name }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
+  rubocop:
+    name: Rubocop
+    uses: theforeman/actions/.github/workflows/rubocop.yml@v0
+    with:
+      command: bundle exec rubocop --parallel --format github
+
   test:
-    runs-on: ubuntu-20.04
-    strategy:
-      fail-fast: false
-      matrix:
-        ruby:
-          - "2.7"
-          - "3.0"
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up Ruby
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: ${{ matrix.ruby }}
-        bundler-cache: true
-    - name: Run Rubocop
-      run: bundle exec rubocop
-    - name: Run tests
-      run: bundle exec rake
+    name: Tests
+    needs: rubocop
+    uses: theforeman/actions/.github/workflows/smart_proxy_plugin.yml@v0
