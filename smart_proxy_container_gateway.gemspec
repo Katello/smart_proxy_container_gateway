@@ -12,7 +12,7 @@ Gem::Specification.new do |s|
   s.files = Dir['{lib,settings.d,bundler.d}/**/*'] + s.extra_rdoc_files
   s.test_files = s.files.grep(%r{^(test|spec|features)/})
   s.homepage = 'https://github.com/Katello/smart_proxy_container_gateway'
-  s.license = 'GPLv3'
+  s.license = 'GPL-3.0-only'
 
   s.required_ruby_version = '>= 2.7'
   s.add_dependency 'activesupport'
