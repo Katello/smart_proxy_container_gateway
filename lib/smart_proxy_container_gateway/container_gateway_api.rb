@@ -90,10 +90,10 @@ module Proxy
       end
 
       get '/v1/search/?' do
-        # Checks for podman client and issues a 404 in that case. Podman
+        # Checks for v2 client and issues a 404 in that case. Podman
         # examines the response from a /v1/search request. If the result
         # is a 4XX, it will then proceed with a request to /_catalog
-        if !request.env['HTTP_USER_AGENT'].nil? && request.env['HTTP_USER_AGENT'].downcase.include?('libpod')
+        if request.env['HTTP_DOCKER_DISTRIBUTION_API_VERSION'] == 'registry/2.0'
           halt 404, "not found"
         end
 

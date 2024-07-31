@@ -193,6 +193,12 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert last_response.ok?
   end
 
+  def test_v1_search_v2_client
+    header 'DOCKER_DISTRIBUTION_API_VERSION', 'registry/2.0'
+    get '/v1/search'
+    assert last_response.status == 404
+  end
+
   def test_v1_search_with_user
     user_id = @database.connection[:users].insert(name: 'test_user')
     catalog = ["test_repo"]
@@ -210,7 +216,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
         }
       ).to_return(:body => foreman_auth_response.to_json)
 
-    header 'HTTP_USER_AGENT', 'notpodman'
+    header 'DOCKER_DISTRIBUTION_API_VERSION', 'registry/1.0'
     # Basic test_user:test_password
     header "AUTHORIZATION", "Basic dGVzdF91c2VyOnRlc3RfcGFzc3dvcmQ="
 
@@ -224,7 +230,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     @container_gateway_main.expects(:catalog).with(nil).returns(catalog)
     catalog.expects(:limit).returns(catalog)
     catalog.expects(:select_map).returns(catalog)
-    header 'HTTP_USER_AGENT', 'notpodman'
+    header 'DOCKER_DISTRIBUTION_API_VERSION', 'registry/1.0'
     get '/v1/search'
     assert last_response.ok?
     assert_equal [{ "description" => "", "name" => "test_repo" }].sort, JSON.parse(last_response.body)["results"].sort
