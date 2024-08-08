@@ -5,18 +5,18 @@ Gem::Specification.new do |s|
   s.version = Proxy::ContainerGateway::VERSION
 
   s.summary = 'Pulp 3 container registry support for Foreman/Katello Smart-Proxy'
-  s.description = 'Pulp 3 container registry support for Foreman/Katello Smart-Proxy'
+  s.description = 'A plug-in for Pulp 3 container registry support for Foreman/Katello Smart-Proxy'
   s.authors = ['Ian Ballou']
   s.email = 'ianballou67@gmail.com'
   s.extra_rdoc_files = ['README.md', 'LICENSE']
   s.files = Dir['{lib,settings.d,bundler.d}/**/*'] + s.extra_rdoc_files
   s.test_files = s.files.grep(%r{^(test|spec|features)/})
   s.homepage = 'https://github.com/Katello/smart_proxy_container_gateway'
-  s.license = 'GPLv3'
+  s.license = 'GPL-3.0'
 
   s.required_ruby_version = '>= 2.7'
-  s.add_dependency 'activesupport'
-  s.add_dependency 'pg'
-  s.add_dependency 'sequel'
-  s.add_dependency 'sqlite3'
+  s.add_dependency 'activesupport', '~> 6.1.0'
+  s.add_dependency 'pg', '~> 1.5'
+  s.add_dependency 'sequel', '~> 5.0'
+  s.add_dependency 'sqlite3', '~> 1.4'
 end
