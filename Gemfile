@@ -9,7 +9,8 @@ group :development do
   gem 'rack-test'
   gem 'webmock'
   gem 'mocha'
-  gem 'smart_proxy', :github => "theforeman/smart-proxy", :branch => 'develop'
+  gem 'smart_proxy', :github => "theforeman/smart-proxy",
+                     :branch => ENV.fetch('SMART_PROXY_BRANCH', 'develop')
 end
 
 # load local gemfile
