@@ -9,17 +9,20 @@ module Proxy
     extend ::Proxy::Log
 
     class ContainerGatewayMain
-      attr_reader :database
+      attr_reader :database, :client_endpoint
 
-      def initialize(database:, pulp_endpoint:, pulp_client_ssl_ca:, pulp_client_ssl_cert:, pulp_client_ssl_key:)
+      # rubocop:disable Metrics/ParameterLists, Layout/LineLength
+      def initialize(database:, pulp_endpoint:, pulp_client_ssl_ca:, pulp_client_ssl_cert:, pulp_client_ssl_key:, client_endpoint: nil)
         @database = database
         @pulp_endpoint = pulp_endpoint
+        @client_endpoint = client_endpoint || pulp_endpoint
         @pulp_client_ssl_ca = pulp_client_ssl_ca
         @pulp_client_ssl_cert = OpenSSL::X509::Certificate.new(File.read(pulp_client_ssl_cert))
         @pulp_client_ssl_key = OpenSSL::PKey::RSA.new(
           File.read(pulp_client_ssl_key)
         )
       end
+      # rubocop:enable Metrics/ParameterLists, Layout/LineLength
 
       def pulp_registry_request(uri, headers)
         http_client = Net::HTTP.new(uri.host, uri.port)

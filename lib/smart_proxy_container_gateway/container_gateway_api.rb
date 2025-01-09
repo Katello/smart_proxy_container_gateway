@@ -46,8 +46,9 @@ module Proxy
           status pulp_response.code.to_i
           body pulp_response.body
         else
-          redirection_location = pulp_response['location']
-          redirect to(redirection_location)
+          redirection_uri = URI(pulp_response['location'])
+          redirection_uri.host = URI(container_gateway_main.client_endpoint).host
+          redirect(redirection_uri.to_s)
         end
       end
 
@@ -236,8 +237,9 @@ module Proxy
           status pulp_response.code.to_i
           body pulp_response.body
         else
-          redirection_location = pulp_response['location']
-          redirect to(redirection_location)
+          redirection_uri = URI(pulp_response['location'])
+          redirection_uri.host = URI(container_gateway_main.client_endpoint).host
+          redirect(redirection_uri.to_s)
         end
       end
 

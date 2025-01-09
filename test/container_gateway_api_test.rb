@@ -120,6 +120,24 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal('', last_response.body)
   end
 
+  def test_redirects_manifest_request_with_client_endpoint
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_repo_auth).returns({})
+    @container_gateway_main.stubs(:client_endpoint).returns("https://loadbalancer.example.com")
+
+    redirect_headers = {
+      'location' => "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                    "/pulp/container/library/test_repo/manifests/test_tag?validate_token=test_token"
+    }
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                       "/pulpcore_registry/v2/library/test_repo/manifests/test_tag").
+      to_return(:status => 302, :body => '', :headers => redirect_headers)
+
+    get '/v2/library/test_repo/manifests/test_tag'
+    assert last_response.redirect?, "Last response was not a redirect: #{last_response.body}"
+    assert_equal('', last_response.body)
+    assert last_response.headers['Location'].include?("https://loadbalancer.example.com")
+  end
+
   def test_redirects_blob_request
     ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_repo_auth).returns({})
     redirect_headers = { 'location' => "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
@@ -131,6 +149,22 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     get '/v2/library/test_repo/blobs/test_digest'
     assert last_response.redirect?, "Last response was not a redirect: #{last_response.body}"
     assert_equal('', last_response.body)
+  end
+
+  def test_redirects_blob_request_with_client_endpoint
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_repo_auth).returns({})
+    @container_gateway_main.stubs(:client_endpoint).returns("https://loadbalancer.example.com")
+
+    redirect_headers = { 'location' => "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                                       "/pulp/container/library/test_repo/blobs/test_digest?validate_token=test_token" }
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                       "/pulpcore_registry/v2/library/test_repo/blobs/test_digest").
+      to_return(:status => 302, :body => '', :headers => redirect_headers)
+
+    get '/v2/library/test_repo/blobs/test_digest'
+    assert last_response.redirect?, "Last response was not a redirect: #{last_response.body}"
+    assert_equal('', last_response.body)
+    assert last_response.headers['Location'].include?("https://loadbalancer.example.com")
   end
 
   def test_redirects_blob_head_request
