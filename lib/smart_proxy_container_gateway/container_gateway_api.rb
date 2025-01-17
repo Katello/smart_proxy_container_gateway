@@ -1,6 +1,7 @@
 require 'active_support'
 require 'active_support/core_ext/integer'
 require 'active_support/core_ext/string'
+require 'active_support/core_ext/object/blank'
 require 'active_support/time_with_zone'
 require 'sinatra'
 require 'smart_proxy_container_gateway/container_gateway'
@@ -137,6 +138,17 @@ module Proxy
       get '/v2/token' do
         response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'
 
+        # Flatpak client requests do not contain the account param that podman relies on.
+        # It contains Base64 encoded username in the Authorization header.
+        # We need to extract the username from the Authorization header and
+        # set it as the account param to be used when inserting new token record.
+        if flatpak_client? && auth_header.raw_header.present?
+          encoded_string = auth_header.raw_header&.split(' ')&.[](1)
+          decoded_string = Base64.decode64(encoded_string) if encoded_string.present?
+          username = decoded_string.split(':')[0] if decoded_string.present?
+          request.params['account'] ||= username if username.present?
+        end
+
         unless auth_header.present? && auth_header.basic_auth?
           return { token: AuthorizationHeader::UNAUTHORIZED_TOKEN, issued_at: Time.now.rfc3339,
                    expires_in: 1.year.seconds.to_i }.to_json
@@ -164,12 +176,15 @@ module Proxy
           # 'expires_in' is an optional field. If not provided, assume 60 seconds per OAuth2 spec
           expires_in = token_response_body.fetch("expires_in", 60)
           expires_at = token_issue_time + expires_in.seconds
-
-          container_gateway_main.insert_token(
-            request.params['account'],
-            token_response_body['token'],
-            expires_at.rfc3339
-          )
+          if request.params['account'].present?
+            container_gateway_main.insert_token(
+              request.params['account'],
+              token_response_body['token'],
+              expires_at.rfc3339
+            )
+          else
+            halt 401, "unauthorized"
+          end
 
           repo_response = ForemanApi.new.fetch_user_repositories(auth_header.raw_header, request.params)
           if repo_response.code.to_i != 200
@@ -207,6 +222,10 @@ module Proxy
       end
 
       private
+
+      def flatpak_client?
+        request.user_agent&.downcase&.include?('flatpak')
+      end
 
       def head_or_get_blobs
         repository = params[:splat][0]
@@ -264,12 +283,21 @@ module Proxy
         if auth_header.present? && auth_header.valid_user_token?
           user_token_is_valid = true
           username = auth_header.user[:name]
+          # For flatpak client, header doesn't contain user name. Extract it from token.
+          username ||= container_gateway_main.token_user(@value.split(' ')[1]) if flatpak_client?
         end
         username = request.params['account'] if username.nil?
 
         return if container_gateway_main.authorized_for_repo?(repository, user_token_is_valid, username)
 
         redirect_authorization_headers
+
+        # If username couldn't be determined from the token or auth_headers
+        # which is case for first flatpak request, halt with 401 instead of 404
+        if flatpak_client? && username.nil?
+          halt 401, "unauthorized"
+        end
+
         throw_repo_not_found_error
       end
 
