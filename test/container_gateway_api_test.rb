@@ -246,11 +246,40 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal ["test_repo"], JSON.parse(last_response.body)["repositories"]
   end
 
-  def test_token_no_auth
-    get '/v2/token'
-
+  def test_catalog_unauthenticated_token
+    header "AUTHORIZATION", "Bearer unauthenticated"
+    catalog = ["test_repo"]
+    @container_gateway_main.expects(:catalog).returns(catalog)
+    catalog.expects(:select_map).returns(catalog)
+    get '/v2/_catalog'
     assert last_response.ok?
-    assert_equal JSON.parse(last_response.body)["token"], 'unauthorized'
+    assert_equal ["test_repo"], JSON.parse(last_response.body)["repositories"]
+  end
+
+  def test_token_unauthorized
+    ::Proxy::SETTINGS.foreman_url = 'https://foreman'
+    foreman_response = {
+      "token": "unauthorized"
+    }
+    stub_request(:get, "#{::Proxy::SETTINGS.foreman_url}/v2/token").
+      to_return(:body => foreman_response.to_json)
+
+    get '/v2/token'
+    assert_equal 401, last_response.status
+    assert_equal last_response.body, 'unauthorized'
+  end
+
+  def test_token_unauthenticated
+    ::Proxy::SETTINGS.foreman_url = 'https://foreman'
+    foreman_response = {
+      "token": "unauthenticated"
+    }
+    stub_request(:get, "#{::Proxy::SETTINGS.foreman_url}/v2/token").
+      to_return(:body => foreman_response.to_json)
+
+    get '/v2/token'
+    assert last_response.ok?
+    assert_equal "unauthenticated", JSON.parse(last_response.body)["token"]
   end
 
   def test_token_basic_auth

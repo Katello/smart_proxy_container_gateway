@@ -118,7 +118,7 @@ module Proxy
       get '/v2/_catalog/?' do
         catalog = []
         if auth_header.present?
-          if auth_header.unauthorized_token?
+          if auth_header.unauthenticated_token? || auth_header.unauthorized_token?
             catalog = container_gateway_main.catalog.select_map(::Sequel[:repositories][:name])
           elsif auth_header.valid_user_token?
             catalog = container_gateway_main.catalog(auth_header.user).select_map(::Sequel[:repositories][:name])
@@ -149,42 +149,33 @@ module Proxy
           request.params['account'] ||= username if username.present?
         end
 
-        unless auth_header.present? && auth_header.basic_auth?
-          return { token: AuthorizationHeader::UNAUTHORIZED_TOKEN, issued_at: Time.now.rfc3339,
-                   expires_in: 1.year.seconds.to_i }.to_json
-        end
-
         token_response = ForemanApi.new.fetch_token(auth_header.raw_header, request.params)
-        if token_response.code.to_i != 200
-          halt token_response.code.to_i, token_response.body
-        else
-          # This returned token should follow OAuth2 spec. We need some minor conversion
-          # to store the token with the expires_at time (using rfc3339).
-          token_response_body = JSON.parse(token_response.body)
+        halt token_response.code.to_i, token_response.body unless token_response.code.to_i == 200
 
-          if token_response_body['token'].nil?
-            halt 502, "Recieved malformed token response"
-          end
+        token_response_body = JSON.parse(token_response.body)
+        halt 502, "Recieved malformed token response" if token_response_body['token'].nil?
+
+        # Check for unauthorized tokens and respond with 401
+        halt 401, "unauthorized" if token_response_body['token'] == AuthorizationHeader::UNAUTHORIZED_TOKEN
+
+        # Skip storing the token if it is unauthenticated
+        unless token_response_body['token'] == AuthorizationHeader::UNAUTHENTICATED_TOKEN
 
           # "issued_at" is an optional field. Per OAuth2 we assume time of token response as
           # the issue time if the field is ommitted.
           token_issue_time = (token_response_body["issued_at"] || token_response["Date"])&.to_time
-          if token_issue_time.nil?
-            halt 502, "Recieved malformed token response"
-          end
+          halt 502, "Recieved malformed token response" if token_issue_time.nil?
 
+          # This returned token should follow OAuth2 spec. We need some minor conversion
+          # to store the token with the expires_at time (using rfc3339).
           # 'expires_in' is an optional field. If not provided, assume 60 seconds per OAuth2 spec
           expires_in = token_response_body.fetch("expires_in", 60)
           expires_at = token_issue_time + expires_in.seconds
-          if request.params['account'].present?
-            container_gateway_main.insert_token(
-              request.params['account'],
-              token_response_body['token'],
-              expires_at.rfc3339
-            )
-          else
-            halt 401, "unauthorized"
-          end
+          container_gateway_main.insert_token(
+            request.params['account'],
+            token_response_body['token'],
+            expires_at.rfc3339
+          )
 
           repo_response = ForemanApi.new.fetch_user_repositories(auth_header.raw_header, request.params)
           if repo_response.code.to_i != 200
@@ -193,10 +184,10 @@ module Proxy
             container_gateway_main.update_user_repositories(request.params['account'],
                                                             JSON.parse(repo_response.body)['repositories'])
           end
-
-          # Return the original token response from Katello
-          return token_response.body
         end
+
+        # Return the original token response from Katello
+        return token_response.body
       end
 
       get '/users/?' do
@@ -318,6 +309,7 @@ module Proxy
         inject_attr :database_impl, :database
         inject_attr :container_gateway_main_impl, :container_gateway_main
         UNAUTHORIZED_TOKEN = 'unauthorized'.freeze
+        UNAUTHENTICATED_TOKEN = 'unauthenticated'.freeze
 
         def initialize(value)
           @value = value || ''
@@ -341,6 +333,10 @@ module Proxy
 
         def unauthorized_token?
           @value.split(' ')[1] == UNAUTHORIZED_TOKEN
+        end
+
+        def unauthenticated_token?
+          @value.split(' ')[1] == UNAUTHENTICATED_TOKEN
         end
 
         def token_auth?
