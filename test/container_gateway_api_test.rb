@@ -281,10 +281,16 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
   end
 
   def test_token_no_auth
-    get '/v2/token'
+    ::Proxy::SETTINGS.foreman_url = 'https://foreman'
+    foreman_response = {
+      "token": "unauthenticated"
+    }
+    stub_request(:get, "#{::Proxy::SETTINGS.foreman_url}/v2/token").
+      to_return(:body => foreman_response.to_json)
 
-    assert last_response.ok?
-    assert_equal JSON.parse(last_response.body)["token"], 'unauthorized'
+    get '/v2/token'
+    assert_equal 401, last_response.status
+    assert_equal last_response.body, 'unauthorized'
   end
 
   def test_token_basic_auth
