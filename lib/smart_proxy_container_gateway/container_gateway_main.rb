@@ -1,6 +1,7 @@
 require 'net/http'
 require 'uri'
 require 'digest'
+require 'erb'
 require 'smart_proxy_container_gateway/dependency_injection'
 require 'sequel'
 module Proxy
@@ -38,6 +39,14 @@ module Proxy
           end
           http.request request
         end
+      end
+
+      def flatpak_static_index(headers, params = {})
+        uri = URI.parse("#{@pulp_endpoint}/pulpcore_registry/index/static")
+        unless params.empty?
+          uri.query = params.map { |k, v| "#{ERB::Util.url_encode(k.to_s)}=#{ERB::Util.url_encode(v.to_s)}" }.join('&')
+        end
+        pulp_registry_request(uri, headers)
       end
 
       def ping(headers)
