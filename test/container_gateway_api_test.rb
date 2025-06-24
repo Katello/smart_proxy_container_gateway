@@ -375,4 +375,56 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal 404, last_response.status
     assert_includes last_response.body, 'Repository name unknown'
   end
+
+  def test_flatpak_static_index_success
+    static_index_response = {
+      "Results" => [
+        { "Name" => "org.test.app", "Images" => [] },
+        { "Name" => "org.another.app", "Images" => [] }
+      ]
+    }
+
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/index/static").
+      to_return(:status => 200, :body => static_index_response.to_json)
+
+    get '/index/static'
+    assert last_response.ok?, "Last response was not ok: #{last_response.body}"
+    assert_equal static_index_response.to_json, last_response.body
+    assert_equal 200, last_response.status
+  end
+
+  def test_flatpak_static_index_with_params
+    static_index_response = {
+      "Results" => [
+        { "Name" => "org.test.app", "Images" => [] }
+      ]
+    }
+
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                       "/pulpcore_registry/index/static?branch=stable&arch=x86_64").
+      to_return(:status => 200, :body => static_index_response.to_json)
+
+    get '/index/static?branch=stable&arch=x86_64'
+    assert last_response.ok?, "Last response was not ok: #{last_response.body}"
+    assert_equal static_index_response.to_json, last_response.body
+    assert_equal 200, last_response.status
+  end
+
+  def test_flatpak_static_index_error_response
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/index/static").
+      to_return(:status => 404, :body => '{"error": "not found"}')
+
+    get '/index/static'
+    assert_equal 404, last_response.status
+    assert_equal '{"error": "not found"}', last_response.body
+  end
+
+  def test_flatpak_static_index_server_error
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}/pulpcore_registry/index/static").
+      to_return(:status => 500, :body => '{"error": "internal server error"}')
+
+    get '/index/static'
+    assert_equal 500, last_response.status
+    assert_equal '{"error": "internal server error"}', last_response.body
+  end
 end

@@ -20,6 +20,28 @@ module Proxy
       inject_attr :database_impl, :database
       inject_attr :container_gateway_main_impl, :container_gateway_main
 
+      get '/index/static/?' do
+        # TODO: filter out repositories that are not tied to the (optional) authenticated host
+        # host = <lookup host>
+        # catalog = host_catalog(host)
+
+        # pulp_response = container_gateway_main.flatpak_static_index(translated_headers_for_proxy, params)
+        # if pulp_response.code.to_i >= 400
+        #   status pulp_response.code.to_i
+        #   body pulp_response.body
+        # end
+
+        # pulp_index = JSON.parse(pulp_response.body)
+        # pulp_index["Results"].select! { |result| catalog.include?(result["Name"]) }
+
+        # status 200
+        # body pulp_index.to_json
+
+        pulp_response = container_gateway_main.flatpak_static_index(translated_headers_for_proxy, params)
+        status pulp_response.code.to_i
+        body pulp_response.body
+      end
+
       get '/v1/_ping/?' do
         pulp_response = container_gateway_main.ping(translated_headers_for_proxy)
         status pulp_response.code.to_i
