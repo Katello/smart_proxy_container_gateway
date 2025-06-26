@@ -163,5 +163,75 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
     assert_equal @database.connection[:repositories].select_map(:id).sort,
                  @database.connection[:repositories_users].where(user_id: user[:id]).select_map(:repository_id).sort
   end
+
+  def updates_host_repositories_correctly
+    @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true },
+                                                    { 'repository' => 'test_repo2', 'auth_required' => true }])
+    @database.connection[:hosts].insert(uuid: 'host-uuid-1')
+
+    @container_gateway_main.update_host_repositories('host-uuid-1', ['test_repo1'])
+
+    host = @database.connection[:hosts].first(uuid: 'host-uuid-1')
+    repo = @database.connection[:repositories].first(name: 'test_repo1')
+    assert_equal [[repo[:id], host[:id]]], @database.connection[:hosts_repositories].select_map(%i[repository_id host_id])
+  end
+
+  def clears_existing_host_repositories_before_update
+    @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true },
+                                                    { 'repository' => 'test_repo2', 'auth_required' => true }])
+    host = @database.connection[:hosts].insert(uuid: 'host-uuid-1')
+    repo = @database.connection[:repositories].first(name: 'test_repo1')
+    @database.connection[:hosts_repositories].insert(repository_id: repo[:id], host_id: host[:id])
+
+    @container_gateway_main.update_host_repositories('host-uuid-1', ['test_repo2'])
+
+    updated_repo = @database.connection[:repositories].first(name: 'test_repo2')
+    assert_equal [[updated_repo[:id], host[:id]]],
+                 @database.connection[:hosts_repositories].select_map(%i[repository_id host_id])
+  end
+
+  def updates_host_repo_mapping_correctly
+    @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true },
+                                                    { 'repository' => 'test_repo2', 'auth_required' => true }])
+    @database.connection[:hosts].insert(uuid: 'host-uuid-1')
+    @database.connection[:hosts].insert(uuid: 'host-uuid-2')
+
+    host_repo_maps = {
+      'hosts' => [
+        { 'host-uuid-1' => [{ 'repository' => 'test_repo1', 'auth_required' => true }] },
+        { 'host-uuid-2' => [{ 'repository' => 'test_repo2', 'auth_required' => true }] }
+      ]
+    }
+
+    @container_gateway_main.update_host_repo_mapping(host_repo_maps)
+
+    host1 = @database.connection[:hosts].first(uuid: 'host-uuid-1')
+    host2 = @database.connection[:hosts].first(uuid: 'host-uuid-2')
+    repo1 = @database.connection[:repositories].first(name: 'test_repo1')
+    repo2 = @database.connection[:repositories].first(name: 'test_repo2')
+
+    assert_equal [[repo1[:id], host1[:id]], [repo2[:id], host2[:id]]],
+                 @database.connection[:hosts_repositories].select_map(%i[repository_id host_id])
+  end
+
+  def clears_existing_host_repo_mapping_before_update
+    @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true },
+                                                    { 'repository' => 'test_repo2', 'auth_required' => true }])
+    host = @database.connection[:hosts].insert(uuid: 'host-uuid-1')
+    repo = @database.connection[:repositories].first(name: 'test_repo1')
+    @database.connection[:hosts_repositories].insert(repository_id: repo[:id], host_id: host[:id])
+
+    host_repo_maps = {
+      'hosts' => [
+        { 'host-uuid-1' => [{ 'repository' => 'test_repo2', 'auth_required' => true }] }
+      ]
+    }
+
+    @container_gateway_main.update_host_repo_mapping(host_repo_maps)
+
+    updated_repo = @database.connection[:repositories].first(name: 'test_repo2')
+    assert_equal [[updated_repo[:id], host[:id]]],
+                 @database.connection[:hosts_repositories].select_map(%i[repository_id host_id])
+  end
 end
 # rubocop:enable Metrics/AbcSize

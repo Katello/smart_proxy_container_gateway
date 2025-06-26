@@ -230,10 +230,7 @@ module Proxy
       end
 
       def find_or_create_host(uuid)
-        host = database.connection[:hosts][{ uuid: uuid }]
-        return host if host
-
-        database.connection[:hosts].insert(uuid: uuid)
+        database.connection[:hosts].insert_conflict(target: :uuid, action: :ignore).insert(uuid: uuid)
         database.connection[:hosts][{ uuid: uuid }]
       end
 
@@ -260,16 +257,17 @@ module Proxy
       end
 
       def cert_authorized_for_repo?(repo_name, uuid)
-        repository = database.connection[:repositories][{ name: repo_name }]
-        return false if repository.nil?
-        return true unless repository[:auth_required]
+        database.connection.transaction(isolation: :serializable, retry_on: [Sequel::SerializationFailure]) do
+          repository = database.connection[:repositories][{ name: repo_name }]
+          return false if repository.nil?
+          return true unless repository[:auth_required]
 
-        host = database.connection[:hosts][{ uuid: uuid }]
-        return false if host.nil?
-
-        !database.connection[:hosts_repositories].where(
-          repository_id: repository[:id], host_id: host[:id]
-        ).empty?
+          database.connection[:hosts_repositories]
+                  .where(repository_id: repository[:id])
+                  .join(:hosts, id: :host_id)
+                  .where(Sequel[:hosts][:uuid] => uuid)
+                  .any?
+        end
       end
 
       def token_user(token)
