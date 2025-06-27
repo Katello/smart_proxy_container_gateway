@@ -7,6 +7,7 @@ require 'sinatra'
 require 'smart_proxy_container_gateway/container_gateway'
 require 'smart_proxy_container_gateway/container_gateway_main'
 require 'smart_proxy_container_gateway/foreman_api'
+require 'smart_proxy_container_gateway/rhsm_client'
 
 module Proxy
   module ContainerGateway
@@ -26,7 +27,9 @@ module Proxy
       end
 
       get '/v2/?' do
-        if auth_header.present? && (auth_header.unauthorized_token? || auth_header.valid_user_token?)
+        client_cert = ::Cert::RhsmClient.new(cert_from_request) if valid_cert?
+        valid_uuid = client_cert&.uuid&.present?
+        if valid_uuid || (auth_header.present? && (auth_header.unauthorized_token? || auth_header.valid_user_token?))
           response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'
           pulp_response = container_gateway_main.ping(translated_headers_for_proxy)
           status pulp_response.code.to_i
@@ -117,8 +120,17 @@ module Proxy
       end
 
       get '/v2/_catalog/?' do
+        client_cert = ::Cert::RhsmClient.new(cert_from_request) if valid_cert?
         catalog = []
-        if auth_header.present?
+        if client_cert&.uuid&.present?
+          host = database.connection[:hosts][{ uuid: client_cert.uuid }]
+          if host.nil?
+            repo_response = ForemanApi.new.fetch_host_repositories(client_cert.uuid, request.params)
+            container_gateway_main.update_host_repositories(client_cert.uuid,
+                                                            JSON.parse(repo_response.body)['repositories'])
+          end
+          catalog = container_gateway_main.host_catalog(client_cert.uuid).select_map(::Sequel[:repositories][:name])
+        elsif auth_header.present?
           if auth_header.unauthenticated_token? || auth_header.unauthorized_token?
             catalog = container_gateway_main.catalog.select_map(::Sequel[:repositories][:name])
           elsif auth_header.valid_user_token?
@@ -213,10 +225,49 @@ module Proxy
         {}
       end
 
+      put '/update_hosts/?' do
+        do_authorize_any
+        hosts = params['hosts'] || []
+        # Refresh hosts table
+        database.connection.transaction(isolation: :serializable, retry_on: [Sequel::SerializationFailure]) do
+          hosts_table = database.connection[:hosts]
+          hosts_table.delete
+          hosts_table.import(%i[uuid], hosts.map { |host| [host['uuid']] })
+        end
+        {}
+      end
+
+      put '/host_repository_mapping/?' do
+        do_authorize_any
+        container_gateway_main.update_host_repo_mapping(params)
+        {}
+      end
+
+      put '/update_host_repositories/?' do
+        do_authorize_any
+        params['hosts'].flat_map do |host_map|
+          host_map.filter_map do |host_uuid, repos|
+            if repos.nil? || repos.empty?
+              repo_names = []
+            else
+              repo_names = repos
+                           .select { |repo| repo['auth_required'].to_s.downcase == "true" }
+                           .map { |repo| repo['repository'] }
+            end
+            container_gateway_main.update_host_repositories(host_uuid, repo_names)
+          end
+        end
+        {}
+      end
+
       private
 
       def flatpak_client?
         request.user_agent&.downcase&.include?('flatpak')
+      end
+
+      def valid_cert?
+        cert_from_request.present? && !cert_from_request.empty? && !cert_from_request.include?('null')
       end
 
       def head_or_get_blobs
@@ -272,6 +323,8 @@ module Proxy
       end
 
       def handle_repo_auth(repository, auth_header, request)
+        return if handle_client_cert_auth(repository)
+
         user_token_is_valid = false
         if auth_header.present? && auth_header.valid_user_token?
           user_token_is_valid = true
@@ -279,19 +332,26 @@ module Proxy
           # For flatpak client, header doesn't contain user name. Extract it from token.
           username ||= container_gateway_main.token_user(@value.split(' ')[1]) if flatpak_client?
         end
-        username = request.params['account'] if username.nil?
+        username ||= request.params['account']
 
         return if container_gateway_main.authorized_for_repo?(repository, user_token_is_valid, username)
 
+        handle_unauthorized_access(username)
+      end
+
+      def handle_unauthorized_access(username)
         redirect_authorization_headers
-
-        # If username couldn't be determined from the token or auth_headers
-        # which is case for first flatpak request, halt with 401 instead of 404
-        if flatpak_client? && username.nil?
-          halt 401, "unauthorized"
-        end
-
+        halt 401, "unauthorized" if flatpak_client? && username.nil?
         throw_repo_not_found_error
+      end
+
+      def handle_client_cert_auth(repository)
+        client_cert = ::Cert::RhsmClient.new(cert_from_request) if valid_cert?
+        if client_cert&.uuid&.present?
+          halt 401, "unauthorized" unless container_gateway_main.cert_authorized_for_repo?(repository, client_cert.uuid)
+          return true
+        end
+        false
       end
 
       def redirect_authorization_headers
@@ -299,6 +359,15 @@ module Proxy
         response.headers['Www-Authenticate'] = "Bearer realm=\"https://#{request.host}/v2/token\"," \
                                                "service=\"#{request.host}\"," \
                                                "scope=\"repository:registry:pull,push\""
+      end
+
+      def cert_from_request
+        request.env['HTTP_X_RHSM_SSL_CLIENT_CERT'] ||
+          request.env['SSL_CLIENT_CERT'] ||
+          request.env['HTTP_SSL_CLIENT_CERT'] ||
+          ENV['HTTP_X_RHSM_SSL_CLIENT_CERT'] ||
+          ENV['SSL_CLIENT_CERT'] ||
+          ENV['HTTP_SSL_CLIENT_CERT']
       end
 
       def auth_header

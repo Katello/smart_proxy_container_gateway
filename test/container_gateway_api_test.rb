@@ -37,6 +37,7 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     @database.connection[:repositories_users].delete
     @database.connection[:users].delete
     @database.connection[:repositories].delete
+    @database.connection[:hosts].delete
   end
 
   def test_ping_v1
@@ -336,5 +337,42 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     get '/v2/token?account=foo'
     assert last_response.ok?
     assert_equal "imarealtoken", JSON.parse(last_response.body)["token"]
+  end
+
+  def test_handle_client_cert_auth_authorized
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_client_cert_auth).returns(true)
+    ::Cert::RhsmClient.any_instance.stubs(:uuid).returns('valid-uuid')
+    redirect_headers = {
+      'location' => "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                    "/pulp/container/library/test_repo/manifests/test_tag"
+    }
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                       "/pulpcore_registry/v2/library/test_repo/manifests/test_tag").
+      to_return(:status => 302, :body => '', :headers => redirect_headers)
+
+    header 'HTTP_SSL_CLIENT_CERT', 'valid-cert'
+    get '/v2/library/test_repo/manifests/test_tag'
+    assert last_response.redirect?, "Last response was not a redirect: #{last_response.body}"
+    assert_equal('', last_response.body)
+  end
+
+  def test_handle_client_cert_auth_unauthorized
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_client_cert_auth).returns(false)
+    ::Cert::RhsmClient.any_instance.stubs(:uuid).returns('invalid-uuid')
+
+    header 'SSL_CLIENT_CERT', 'invalid-cert'
+    get '/v2/test_repo/manifests/test_tag'
+
+    assert_equal 404, last_response.status
+    assert_includes last_response.body, 'Repository name unknown'
+  end
+
+  def test_handle_client_cert_auth_no_cert
+    @container_gateway_main.expects(:cert_authorized_for_repo?).never
+
+    get '/v2/test_repo/manifests/test_tag'
+
+    assert_equal 404, last_response.status
+    assert_includes last_response.body, 'Repository name unknown'
   end
 end

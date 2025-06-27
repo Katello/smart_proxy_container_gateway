@@ -101,6 +101,17 @@ module Proxy
         end
       end
 
+      def host_catalog(host_uuid = nil)
+        if host_uuid.nil?
+          unauthenticated_repos
+        else
+          database.connection[:repositories].
+            left_join(:hosts_repositories, repository_id: :id).
+            left_join(:hosts, ::Sequel[:hosts][:id] => :host_id).where(uuid: host_uuid).
+            or(Sequel[:repositories][:auth_required] => false).order(::Sequel[:repositories][:name])
+        end
+      end
+
       def unauthenticated_repos
         database.connection[:repositories].where(auth_required: false).order(:name)
       end
@@ -163,6 +174,66 @@ module Proxy
         end
       end
 
+      # Replaces the entire host-repo mapping for all hosts.
+      # Assumes host is present in the DB.
+      def update_host_repo_mapping(host_repo_maps)
+        # Get DB tables
+        hosts_repositories = database.connection[:hosts_repositories]
+
+        # Build list of [repository_id, host_id] pairs
+        entries = build_host_repository_mapping(host_repo_maps)
+
+        # Insert all in a single transaction
+        database.connection.transaction(isolation: :serializable, retry_on: [Sequel::SerializationFailure]) do
+          hosts_repositories.delete
+          hosts_repositories.import(%i[repository_id host_id], entries)
+        end
+      end
+
+      def build_host_repository_mapping(host_repo_maps)
+        hosts = database.connection[:hosts]
+        repositories = database.connection[:repositories]
+        entries = host_repo_maps['hosts'].flat_map do |host_map|
+          host_map.filter_map do |host_uuid, repos|
+            host = hosts[{ uuid: host_uuid }]
+            next unless host
+
+            repo_names = repos
+                         .select { |repo| repo['auth_required'].to_s.downcase == "true" }
+                         .map { |repo| repo['repository'] }
+
+            repositories
+              .where(name: repo_names, auth_required: true)
+              .select(:id)
+              .map { |repo| [repo[:id], host[:id]] }
+          end
+        end
+        entries.flatten!(1)
+      end
+
+      def update_host_repositories(uuid, repositories)
+        host = find_or_create_host(uuid)
+        hosts_repositories = database.connection[:hosts_repositories]
+        database.connection.transaction(isolation: :serializable,
+                                        retry_on: [Sequel::SerializationFailure],
+                                        num_retries: 10) do
+          hosts_repositories.where(host_id: host[:id]).delete
+          return if repositories.nil? || repositories.empty?
+
+          hosts_repositories.import(
+            %i[repository_id host_id],
+            database.connection[:repositories].where(name: repositories, auth_required: true).select(:id).map do |repo|
+              [repo[:id], host[:id]]
+            end
+          )
+        end
+      end
+
+      def find_or_create_host(uuid)
+        database.connection[:hosts].insert_conflict(target: :uuid, action: :ignore).insert(uuid: uuid)
+        database.connection[:hosts][{ uuid: uuid }]
+      end
+
       # Returns:
       # true if the user is authorized to access the repo, or
       # false if the user is not authorized to access the repo or if it does not exist
@@ -183,6 +254,20 @@ module Proxy
         end
 
         false
+      end
+
+      def cert_authorized_for_repo?(repo_name, uuid)
+        database.connection.transaction(isolation: :serializable, retry_on: [Sequel::SerializationFailure]) do
+          repository = database.connection[:repositories][{ name: repo_name }]
+          return false if repository.nil?
+          return true unless repository[:auth_required]
+
+          database.connection[:hosts_repositories]
+                  .where(repository_id: repository[:id])
+                  .join(:hosts, id: :host_id)
+                  .where(Sequel[:hosts][:uuid] => uuid)
+                  .any?
+        end
       end
 
       def token_user(token)
