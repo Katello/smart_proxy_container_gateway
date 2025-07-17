@@ -11,6 +11,7 @@ require 'smart_proxy_container_gateway/rhsm_client'
 
 module Proxy
   module ContainerGateway
+    # rubocop:disable Metrics/ClassLength
     class Api < ::Sinatra::Base
       include ::Proxy::Log
       helpers ::Proxy::Helpers
@@ -21,25 +22,32 @@ module Proxy
       inject_attr :container_gateway_main_impl, :container_gateway_main
 
       get '/index/static/?' do
-        # TODO: filter out repositories that are not tied to the (optional) authenticated host
-        # host = <lookup host>
-        # catalog = host_catalog(host)
-
-        # pulp_response = container_gateway_main.flatpak_static_index(translated_headers_for_proxy, params)
-        # if pulp_response.code.to_i >= 400
-        #   status pulp_response.code.to_i
-        #   body pulp_response.body
-        # end
-
-        # pulp_index = JSON.parse(pulp_response.body)
-        # pulp_index["Results"].select! { |result| catalog.include?(result["Name"]) }
-
-        # status 200
-        # body pulp_index.to_json
+        client_cert = ::Cert::RhsmClient.new(cert_from_request) if valid_cert?
+        valid_uuid = client_cert&.uuid&.present?
 
         pulp_response = container_gateway_main.flatpak_static_index(translated_headers_for_proxy, params)
-        status pulp_response.code.to_i
-        body pulp_response.body
+
+        if pulp_response.code.to_i >= 400
+          status pulp_response.code.to_i
+          body pulp_response.body
+        elsif valid_uuid
+          host = database.connection[:hosts][{ uuid: client_cert.uuid }]
+          if host.nil?
+            repo_response = ForemanApi.new.fetch_host_repositories(client_cert.uuid, request.params)
+            halt repo_response.code.to_i, repo_response.body unless repo_response.code.to_i == 200
+            container_gateway_main.update_host_repositories(client_cert.uuid,
+                                                            JSON.parse(repo_response.body)['repositories'])
+          end
+          catalog = container_gateway_main.host_catalog(client_cert.uuid).select_map(::Sequel[:repositories][:name])
+          pulp_index = JSON.parse(pulp_response.body)
+          halt 400, "Error: 'Results' key is missing in pulp_index" unless pulp_index.key?("Results")
+          pulp_index["Results"].select! { |result| catalog.include?(result["Name"]) }
+          status 200
+          body pulp_index.to_json
+        else
+          status pulp_response.code.to_i
+          body pulp_response.body
+        end
       end
 
       get '/v1/_ping/?' do
@@ -369,7 +377,14 @@ module Proxy
 
       def handle_client_cert_auth(repository)
         client_cert = ::Cert::RhsmClient.new(cert_from_request) if valid_cert?
-        if client_cert&.uuid&.present?
+        valid_uuid = client_cert&.uuid&.present?
+        if valid_uuid
+          host = database.connection[:hosts][{ uuid: client_cert.uuid }]
+          if host.nil?
+            repo_response = ForemanApi.new.fetch_host_repositories(client_cert.uuid, request.params)
+            container_gateway_main.update_host_repositories(client_cert.uuid,
+                                                            JSON.parse(repo_response.body)['repositories'])
+          end
           halt 401, "unauthorized" unless container_gateway_main.cert_authorized_for_repo?(repository, client_cert.uuid)
           return true
         end
@@ -454,5 +469,6 @@ module Proxy
         end
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end
