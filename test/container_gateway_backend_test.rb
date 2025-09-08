@@ -233,5 +233,99 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
     assert_equal [[updated_repo[:id], host[:id]]],
                  @database.connection[:hosts_repositories].select_map(%i[repository_id host_id])
   end
+
+  def test_build_host_repository_mapping_with_nil_hosts
+    host_repo_maps = { 'hosts' => nil }
+    result = @container_gateway_main.build_host_repository_mapping(host_repo_maps)
+    assert_empty result
+  end
+
+  def test_build_host_repository_mapping_with_empty_hosts
+    host_repo_maps = { 'hosts' => [] }
+    result = @container_gateway_main.build_host_repository_mapping(host_repo_maps)
+    assert_empty result
+  end
+
+  def test_build_host_repository_mapping_with_nonexistent_host
+    @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true }])
+
+    host_repo_maps = {
+      'hosts' => [
+        { 'nonexistent-uuid' => [{ 'repository' => 'test_repo1', 'auth_required' => true }] }
+      ]
+    }
+
+    result = @container_gateway_main.build_host_repository_mapping(host_repo_maps)
+    assert_empty result
+  end
+
+  def test_build_host_repository_mapping_with_nil_repos
+    @database.connection[:hosts].insert(uuid: 'host-uuid-1')
+
+    host_repo_maps = {
+      'hosts' => [
+        { 'host-uuid-1' => nil }
+      ]
+    }
+
+    result = @container_gateway_main.build_host_repository_mapping(host_repo_maps)
+    assert_empty result
+  end
+
+  def test_build_host_repository_mapping_with_empty_repos
+    @database.connection[:hosts].insert(uuid: 'host-uuid-1')
+
+    host_repo_maps = {
+      'hosts' => [
+        { 'host-uuid-1' => [] }
+      ]
+    }
+
+    result = @container_gateway_main.build_host_repository_mapping(host_repo_maps)
+    assert_empty result
+  end
+
+  def test_build_host_repository_mapping_filters_non_auth_required_repos
+    repo_list = [{ 'repository' => 'public_repo', 'auth_required' => false },
+                 { 'repository' => 'private_repo', 'auth_required' => true }]
+    @container_gateway_main.update_repository_list(repo_list)
+    @database.connection[:hosts].insert(uuid: 'host-uuid-1')
+
+    host_repo_maps = {
+      'hosts' => [
+        { 'host-uuid-1' => [
+          { 'repository' => 'public_repo', 'auth_required' => false },
+          { 'repository' => 'private_repo', 'auth_required' => true }
+        ] }
+      ]
+    }
+
+    result = @container_gateway_main.build_host_repository_mapping(host_repo_maps)
+
+    host = @database.connection[:hosts].first(uuid: 'host-uuid-1')
+    private_repo = @database.connection[:repositories].first(name: 'private_repo')
+
+    assert_equal [[private_repo[:id], host[:id]]], result
+  end
+
+  def test_build_host_repository_mapping_handles_mixed_scenarios
+    @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true }])
+    @database.connection[:hosts].insert(uuid: 'valid-host')
+
+    host_repo_maps = {
+      'hosts' => [
+        { 'valid-host' => [{ 'repository' => 'test_repo1', 'auth_required' => true }] },
+        { 'invalid-host' => [{ 'repository' => 'test_repo1', 'auth_required' => true }] },
+        { 'empty-repos-host' => [] }
+      ]
+    }
+
+    result = @container_gateway_main.build_host_repository_mapping(host_repo_maps)
+
+    host = @database.connection[:hosts].first(uuid: 'valid-host')
+    repo = @database.connection[:repositories].first(name: 'test_repo1')
+
+    assert_equal [[repo[:id], host[:id]]], result
+  end
 end
 # rubocop:enable Metrics/AbcSize
