@@ -195,29 +195,40 @@ module Proxy
         # Insert all in a single transaction
         database.connection.transaction(isolation: :serializable, retry_on: [Sequel::SerializationFailure]) do
           hosts_repositories.delete
-          hosts_repositories.import(%i[repository_id host_id], entries)
+          hosts_repositories.import(%i[repository_id host_id], entries) unless entries.nil? || entries.empty?
         end
       end
 
       def build_host_repository_mapping(host_repo_maps)
+        return [] if host_repo_maps['hosts'].nil?
+
         hosts = database.connection[:hosts]
         repositories = database.connection[:repositories]
+
         entries = host_repo_maps['hosts'].flat_map do |host_map|
           host_map.filter_map do |host_uuid, repos|
-            host = hosts[{ uuid: host_uuid }]
-            next unless host
-
-            repo_names = repos
-                         .select { |repo| repo['auth_required'].to_s.downcase == "true" }
-                         .map { |repo| repo['repository'] }
-
-            repositories
-              .where(name: repo_names, auth_required: true)
-              .select(:id)
-              .map { |repo| [repo[:id], host[:id]] }
+            build_host_entries(hosts, repositories, host_uuid, repos)
           end
         end
-        entries.flatten!(1)
+        entries&.flatten(1)&.compact
+      end
+
+      def build_host_entries(hosts, repositories, host_uuid, repos)
+        host = hosts[{ uuid: host_uuid }]
+        return unless host
+        return if repos.nil? || repos.empty?
+
+        repo_names = extract_auth_required_repo_names(repos)
+        repositories
+          .where(name: repo_names, auth_required: true)
+          .select(:id)
+          .map { |repo| [repo[:id], host[:id]] }
+      end
+
+      def extract_auth_required_repo_names(repos)
+        repos
+          .select { |repo| repo['auth_required'].to_s.downcase == "true" }
+          .map { |repo| repo['repository'] }
       end
 
       def update_host_repositories(uuid, repositories)
