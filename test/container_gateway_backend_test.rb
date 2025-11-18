@@ -327,5 +327,49 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
 
     assert_equal [[repo[:id], host[:id]]], result
   end
+
+  def test_update_host_repositories_with_nil_uuid
+    @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true }])
+
+    # Should not raise an error and should not create any hosts
+    @container_gateway_main.update_host_repositories(nil, ['test_repo1'])
+
+    assert_equal 0, @database.connection[:hosts].count
+    assert_equal 0, @database.connection[:hosts_repositories].count
+  end
+
+  def test_update_host_repositories_with_empty_string_uuid
+    @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true }])
+
+    # Should not raise an error and should not create any hosts
+    @container_gateway_main.update_host_repositories('', ['test_repo1'])
+
+    assert_equal 0, @database.connection[:hosts].count
+    assert_equal 0, @database.connection[:hosts_repositories].count
+  end
+
+  def test_build_host_entries_with_nil_uuid
+    @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true }])
+
+    hosts = @database.connection[:hosts]
+    repositories = @database.connection[:repositories]
+    repos = [{ 'repository' => 'test_repo1', 'auth_required' => true }]
+
+    result = @container_gateway_main.build_host_entries(hosts, repositories, nil, repos)
+
+    assert_nil result
+  end
+
+  def test_build_host_entries_with_empty_string_uuid
+    @container_gateway_main.update_repository_list([{ 'repository' => 'test_repo1', 'auth_required' => true }])
+
+    hosts = @database.connection[:hosts]
+    repositories = @database.connection[:repositories]
+    repos = [{ 'repository' => 'test_repo1', 'auth_required' => true }]
+
+    result = @container_gateway_main.build_host_entries(hosts, repositories, '', repos)
+
+    assert_nil result
+  end
 end
 # rubocop:enable Metrics/AbcSize
