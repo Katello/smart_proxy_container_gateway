@@ -15,6 +15,7 @@ jobs:
     name: Rubocop
     uses: theforeman/actions/.github/workflows/rubocop.yml@v0
     with:
+      ruby: "3.0"
       command: bundle exec rubocop --parallel --format github
 
   test:
