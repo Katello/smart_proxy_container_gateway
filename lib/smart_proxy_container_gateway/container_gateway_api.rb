@@ -262,7 +262,8 @@ module Proxy
         database.connection.transaction(isolation: :serializable, retry_on: [Sequel::SerializationFailure]) do
           hosts_table = database.connection[:hosts]
           hosts_table.delete
-          hosts_table.import(%i[uuid], hosts.map { |host| [host['uuid']] })
+          valid_hosts = hosts.filter_map { |host| [host['uuid']] if host['uuid'].present? }
+          hosts_table.import(%i[uuid], valid_hosts) unless valid_hosts.empty?
         end
         {}
       end
@@ -277,6 +278,8 @@ module Proxy
         do_authorize_any
         params['hosts'].flat_map do |host_map|
           host_map.filter_map do |host_uuid, repos|
+            next if host_uuid.nil? || host_uuid.to_s.strip.empty?
+
             if repos.nil? || repos.empty?
               repo_names = []
             else

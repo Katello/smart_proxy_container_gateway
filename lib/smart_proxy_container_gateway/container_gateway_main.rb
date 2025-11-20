@@ -214,6 +214,8 @@ module Proxy
       end
 
       def build_host_entries(hosts, repositories, host_uuid, repos)
+        return if host_uuid.nil? || host_uuid.to_s.strip.empty?
+
         host = hosts[{ uuid: host_uuid }]
         return unless host
         return if repos.nil? || repos.empty?
@@ -232,7 +234,11 @@ module Proxy
       end
 
       def update_host_repositories(uuid, repositories)
+        return if uuid.nil? || uuid.to_s.strip.empty?
+
         host = find_or_create_host(uuid)
+        return unless host
+
         hosts_repositories = database.connection[:hosts_repositories]
         database.connection.transaction(isolation: :serializable,
                                         retry_on: [Sequel::SerializationFailure],
