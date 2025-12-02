@@ -427,4 +427,71 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal 500, last_response.status
     assert_equal '{"error": "internal server error"}', last_response.body
   end
+
+  def test_update_hosts_filters_nil_uuids
+    hosts = [
+      { 'uuid' => 'host-uuid-1' },
+      { 'uuid' => nil },
+      { 'uuid' => 'host-uuid-2' }
+    ]
+
+    put '/update_hosts', { 'hosts' => hosts }
+    assert last_response.ok?
+
+    # Verify only valid hosts were inserted (old behavior would have failed or inserted nil)
+    assert @database.connection[:hosts].count >= 2
+    assert_not_nil @database.connection[:hosts].first(uuid: 'host-uuid-1')
+    assert_not_nil @database.connection[:hosts].first(uuid: 'host-uuid-2')
+  end
+
+  def test_update_hosts_filters_empty_string_uuids
+    hosts = [
+      { 'uuid' => 'host-uuid-1' },
+      { 'uuid' => '' },
+      { 'uuid' => 'host-uuid-2' }
+    ]
+
+    put '/update_hosts', { 'hosts' => hosts }
+    assert last_response.ok?
+
+    # Verify only valid hosts were inserted
+    assert @database.connection[:hosts].count >= 2
+    assert_not_nil @database.connection[:hosts].first(uuid: 'host-uuid-1')
+    assert_not_nil @database.connection[:hosts].first(uuid: 'host-uuid-2')
+  end
+
+  def test_update_hosts_handles_missing_uuid_key
+    hosts = [
+      { 'uuid' => 'host-uuid-1' },
+      { 'name' => 'host-without-uuid' },
+      { 'uuid' => 'host-uuid-2' }
+    ]
+
+    put '/update_hosts', { 'hosts' => hosts }
+    assert last_response.ok?
+
+    # Verify only valid hosts were inserted
+    assert @database.connection[:hosts].count >= 2
+    assert_not_nil @database.connection[:hosts].first(uuid: 'host-uuid-1')
+    assert_not_nil @database.connection[:hosts].first(uuid: 'host-uuid-2')
+  end
+
+  def test_update_hosts_with_empty_array
+    put '/update_hosts', { 'hosts' => [] }
+    assert last_response.ok?
+  end
+
+  def test_update_hosts_with_all_invalid_uuids
+    hosts = [
+      { 'uuid' => nil },
+      { 'uuid' => '' },
+      { 'name' => 'no-uuid' }
+    ]
+
+    put '/update_hosts', { 'hosts' => hosts }
+    assert last_response.ok?
+
+    # Verify that no hosts were added to the DB
+    assert_equal 0, @database.connection[:hosts].count
+  end
 end
