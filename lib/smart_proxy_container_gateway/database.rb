@@ -4,9 +4,9 @@ module Proxy
     class Database
       attr_reader :connection
 
-      def initialize(connection_string, prior_sqlite_db_path = nil)
+      def initialize(connection_string, db_max_connections, db_pool_timeout, prior_sqlite_db_path = nil)
         Sequel.default_timezone = :local
-        @connection = Sequel.connect(connection_string)
+        @connection = Sequel.connect(connection_string, max_connections: db_max_connections, pool_timeout: db_pool_timeout)
         if connection_string.start_with?('sqlite://')
           @connection.run("PRAGMA foreign_keys = ON;")
           @connection.run("PRAGMA journal_mode = wal;")

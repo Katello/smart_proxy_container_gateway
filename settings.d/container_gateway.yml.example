@@ -9,6 +9,8 @@
 #:katello_registry_path: '/v2/'
 
 #:db_connection_string: postgresql:///container_gateway
+#:db_max_connections: 30
+#:db_pool_timeout: 30
 
 # Legacy options
 #:sqlite_db_path: '/var/lib/foreman-proxy/smart_proxy_container_gateway.db'
