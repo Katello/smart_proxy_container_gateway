@@ -7,7 +7,9 @@ module Proxy
 
       default_settings :pulp_endpoint => "https://#{`hostname`.strip}",
                        :katello_registry_path => '/v2/',
-                       :sqlite_timeout => 30_000
+                       :sqlite_timeout => 30_000,
+                       :db_max_connections => 30,
+                       :db_pool_timeout => 30
 
       # Load defaults that copy values from SETTINGS. This is done as
       # programmable settings since SETTINGS isn't initialized during plugin
@@ -36,7 +38,10 @@ module Proxy
             "sqlite://#{settings[:sqlite_db_path]}?timeout=#{settings[:sqlite_timeout]}"
           end
 
-          Proxy::ContainerGateway::Database.new(connection_string, settings[:sqlite_db_path])
+          Proxy::ContainerGateway::Database.new(connection_string,
+                                                settings[:db_max_connections],
+                                                settings[:db_pool_timeout],
+                                                settings[:sqlite_db_path])
         end)
         container_instance.singleton_dependency :container_gateway_main_impl, (lambda do
           Proxy::ContainerGateway::ContainerGatewayMain.new(
