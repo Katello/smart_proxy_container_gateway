@@ -1,5 +1,5 @@
 module Proxy
   module ContainerGateway
-    VERSION = '3.5.0'.freeze
+    VERSION = '4.0.0'.freeze
   end
 end
