@@ -5,8 +5,7 @@ module Proxy
     class Plugin < ::Proxy::Plugin
       plugin 'container_gateway', Proxy::ContainerGateway::VERSION
 
-      default_settings :pulp_endpoint => "https://#{`hostname`.strip}",
-                       :katello_registry_path => '/v2/',
+      default_settings :katello_registry_path => '/v2/',
                        :sqlite_timeout => 30_000,
                        :db_max_connections => 30,
                        :db_pool_timeout => 30

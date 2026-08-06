@@ -1,7 +1,7 @@
 ---
 :enabled: true
 
-#:pulp_endpoint: 'https://pulp3.example.com'
+:pulp_endpoint: 'https://pulp3.example.com'
 #:pulp_client_ssl_ca: '/path/to/ca.pem'
 #:pulp_client_ssl_cert: '/path/to/cert.pem'
 #:pulp_client_ssl_key: '/path/to/key.pem'

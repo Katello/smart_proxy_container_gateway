@@ -18,6 +18,7 @@ class ContainerGatewayApiFeaturesTest < Test::Unit::TestCase
     Proxy::DefaultModuleLoader.any_instance.expects(:load_configuration_file)
                               .with('container_gateway.yml')
                               .returns(enabled: true, db_connection_string: 'sqlite://',
+                                       :pulp_endpoint => 'https://test.example.com',
                                        :pulp_client_ssl_cert => "#{__dir__}/fixtures/mock_pulp_client.crt",
                                        :pulp_client_ssl_key => "#{__dir__}/fixtures/mock_pulp_client.key",
                                        :pulp_client_ssl_ca => "#{__dir__}/fixtures/mock_pulp_ca.pem")
