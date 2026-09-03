@@ -56,8 +56,37 @@ Logging in with a container client will cause the Container Gateway to fetch a t
 
 # Testing
 
+By default, tests run with SQLite for local development convenience. In CI, tests automatically run against PostgreSQL to match production.
+
+## Running tests locally with SQLite (default)
 ```
 bundle exec rubocop
 
 bundle exec rake test
+```
+
+## Running tests with PostgreSQL (recommended)
+
+First, ensure PostgreSQL is running and create a test database:
+```bash
+# Create test database
+createdb container_gateway_test
+
+# Set environment variable and run tests
+DATABASE_URL=postgres://localhost:5432/container_gateway_test bundle exec rake test
+```
+
+Using Docker for PostgreSQL:
+```bash
+# Start PostgreSQL container
+docker run --name postgres-test -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:15
+
+# Create test database
+docker exec postgres-test createdb -U postgres container_gateway_test
+
+# Run tests
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/container_gateway_test bundle exec rake test
+
+# Stop and remove container when done
+docker stop postgres-test && docker rm postgres-test
 ```

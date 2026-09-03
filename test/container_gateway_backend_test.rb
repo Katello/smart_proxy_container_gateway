@@ -1,14 +1,13 @@
 require 'test_helper'
 require 'mocha/test_unit'
+require 'smart_proxy_container_gateway/container_gateway'
+require 'smart_proxy_container_gateway/container_gateway_api'
+require 'smart_proxy_container_gateway/database'
 
 # rubocop:disable Metrics/AbcSize
 class ContainerGatewayBackendTest < Test::Unit::TestCase
-  require 'smart_proxy_container_gateway/container_gateway'
-  require 'smart_proxy_container_gateway/container_gateway_api'
-  require 'smart_proxy_container_gateway/database'
-
   def setup
-    Proxy::ContainerGateway::Plugin.load_test_settings(:db_connection_string => 'sqlite://',
+    Proxy::ContainerGateway::Plugin.load_test_settings(:db_connection_string => ENV['DATABASE_URL'],
                                                        :db_max_connections => 20,
                                                        :db_pool_timeout => 30,
                                                        :pulp_client_ssl_ca => "#{__dir__}/fixtures/mock_pulp_ca.pem",
@@ -19,12 +18,27 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
     @database = Proxy::ContainerGateway::Database.new(settings[:db_connection_string],
                                                       settings[:db_max_connections],
                                                       settings[:db_pool_timeout])
+    clean_database
     @container_gateway_main = Proxy::ContainerGateway::ContainerGatewayMain.new(
       database: @database, pulp_endpoint: settings[:pulp_endpoint],
       pulp_client_ssl_ca: settings[:pulp_client_ssl_ca],
       pulp_client_ssl_cert: settings[:pulp_client_ssl_cert],
       pulp_client_ssl_key: settings[:pulp_client_ssl_key]
     )
+  end
+
+  def teardown
+    clean_database if @database
+  end
+
+  private
+
+  def clean_database
+    # Clean all tables in reverse dependency order
+    @database.connection[:repositories_users].delete if @database.connection.table_exists?(:repositories_users)
+    @database.connection[:authentication_tokens].delete if @database.connection.table_exists?(:authentication_tokens)
+    @database.connection[:repositories].delete if @database.connection.table_exists?(:repositories)
+    @database.connection[:users].delete if @database.connection.table_exists?(:users)
   end
 
   def test_update_repository_list
