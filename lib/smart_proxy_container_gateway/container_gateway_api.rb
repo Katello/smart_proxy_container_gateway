@@ -181,11 +181,11 @@ module Proxy
       get '/v2/token' do
         response.headers['Docker-Distribution-API-Version'] = 'registry/2.0'
 
-        # Flatpak client requests do not contain the account param that podman relies on.
-        # It contains Base64 encoded username in the Authorization header.
-        # We need to extract the username from the Authorization header and
-        # set it as the account param to be used when inserting new token record.
-        if flatpak_client? && auth_header.raw_header.present?
+        # Some clients (e.g. Flatpak, Cincinnati) do not include the account
+        # query parameter in the token request. Extract the username from the
+        # Base64-encoded Basic Authorization header and use it as the account
+        # param when inserting a new token record.
+        if request.params['account'].nil? && auth_header.raw_header.present?
           encoded_string = auth_header.raw_header&.split(' ')&.[](1)
           decoded_string = Base64.decode64(encoded_string) if encoded_string.present?
           username = decoded_string.split(':')[0] if decoded_string.present?
