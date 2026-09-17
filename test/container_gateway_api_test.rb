@@ -343,6 +343,29 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert_equal "imarealtoken", JSON.parse(last_response.body)["token"]
   end
 
+  def test_token_basic_auth_without_account_param
+    ::Proxy::SETTINGS.foreman_url = 'https://foreman'
+    foreman_response = {
+      "token": "imarealtoken",
+      "issued_at": DateTime.now,
+      "expires_in": 180
+    }
+    stub_request(:get, "#{::Proxy::SETTINGS.foreman_url}/v2/token?account=foo").
+      to_return(:body => foreman_response.to_json)
+
+    repo_response = { "repositories": [{ repository: "test_repo", auth_required: false }] }
+    stub_request(:get, "https://foreman/v2/_catalog?account=foo").
+      to_return(:body => repo_response.to_json)
+
+    # Basic foo:bar
+    header "AUTHORIZATION", "Basic Zm9vOmJhcg=="
+
+    # Omit the `account` parameter when requesting the token.
+    get '/v2/token'
+    assert last_response.ok?
+    assert_equal "imarealtoken", JSON.parse(last_response.body)["token"]
+  end
+
   def test_handle_client_cert_auth_authorized
     ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_client_cert_auth).returns(true)
     ::Cert::RhsmClient.any_instance.stubs(:uuid).returns('valid-uuid')
