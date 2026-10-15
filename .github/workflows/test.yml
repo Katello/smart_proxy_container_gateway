@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - 3.5-stable
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+      - 3.5-stable
 
 concurrency:
   group: ${{ github.ref_name }}-${{ github.workflow }}
@@ -22,3 +26,5 @@ jobs:
     name: Tests
     needs: rubocop
     uses: theforeman/actions/.github/workflows/smart_proxy_plugin.yml@v0
+    with:
+      foreman_proxy_version: 3.19-stable
