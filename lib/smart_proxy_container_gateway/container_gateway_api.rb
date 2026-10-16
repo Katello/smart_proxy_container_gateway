@@ -78,10 +78,17 @@ module Proxy
         if pulp_response.code.to_i >= 400
           status pulp_response.code.to_i
           body pulp_response.body
-        else
+        elsif [301, 302, 307].include?(pulp_response.code.to_i)
           redirection_uri = URI(pulp_response['location'])
           redirection_uri.host = URI(container_gateway_main.client_endpoint).host
           redirect(redirection_uri.to_s)
+        else
+          status pulp_response.code.to_i
+          digest = pulp_response['docker-content-digest']
+          content_type = pulp_response['content-type']
+          response.headers['Docker-Content-Digest'] = digest if digest
+          response.headers['Content-Type'] = content_type if content_type
+          body pulp_response.body
         end
       end
 
