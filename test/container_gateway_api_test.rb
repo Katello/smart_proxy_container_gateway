@@ -143,6 +143,26 @@ class ContainerGatewayApiTest < Test::Unit::TestCase
     assert last_response.headers['Location'].include?("https://loadbalancer.example.com")
   end
 
+  def test_serves_manifest_directly
+    ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_repo_auth).returns({})
+    manifest_body = '{"schemaVersion": 2, "mediaType": "application/vnd.docker.distribution.manifest.v2+json"}'
+    response_headers = {
+      'docker-content-digest' => 'sha256:abc123',
+      'content-type' => 'application/vnd.docker.distribution.manifest.v2+json',
+      'content-length' => manifest_body.length.to_s
+    }
+    stub_request(:get, "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
+                       "/pulpcore_registry/v2/library/test_repo/manifests/test_tag").
+      to_return(:status => 200, :body => manifest_body, :headers => response_headers)
+
+    get '/v2/library/test_repo/manifests/test_tag'
+    assert_equal 200, last_response.status
+    assert_equal manifest_body, last_response.body
+    assert_equal 'sha256:abc123', last_response.headers['Docker-Content-Digest']
+    assert_equal 'application/vnd.docker.distribution.manifest.v2+json', last_response.headers['Content-Type']
+    assert_equal manifest_body.length.to_s, last_response.headers['Content-Length']
+  end
+
   def test_redirects_blob_request
     ::Proxy::ContainerGateway::Api.any_instance.expects(:handle_repo_auth).returns({})
     redirect_headers = { 'location' => "#{::Proxy::ContainerGateway::Plugin.settings.pulp_endpoint}" \
