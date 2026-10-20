@@ -19,9 +19,7 @@ module Proxy
         @client_endpoint = client_endpoint || pulp_endpoint
         @pulp_client_ssl_ca = pulp_client_ssl_ca
         @pulp_client_ssl_cert = OpenSSL::X509::Certificate.new(File.read(pulp_client_ssl_cert))
-        @pulp_client_ssl_key = OpenSSL::PKey::RSA.new(
-          File.read(pulp_client_ssl_key)
-        )
+        @pulp_client_ssl_key = OpenSSL::PKey.read(File.read(pulp_client_ssl_key))
       end
       # rubocop:enable Metrics/ParameterLists, Layout/LineLength
 
