@@ -30,7 +30,7 @@ The Container Gateway plugin requires a Pulp 3 instance to connect to.  Related 
 ```
 :pulp_endpoint: 'https://your_pulp_3_server_here.com'
 :pulp_client_ssl_cert: 'Path to X509 certificate for authenticating with Pulp'
-:pulp_client_ssl_key: 'Path to RSA private key for the Pulp certificate'
+:pulp_client_ssl_key: 'Path to private key for the Pulp certificate'
 ```
 
 # Database information

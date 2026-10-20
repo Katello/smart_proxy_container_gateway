@@ -27,6 +27,18 @@ class ContainerGatewayBackendTest < Test::Unit::TestCase
     )
   end
 
+  def test_loads_non_rsa_pulp_client_key
+    settings = Proxy::ContainerGateway::Plugin.settings
+    assert_nothing_raised do
+      Proxy::ContainerGateway::ContainerGatewayMain.new(
+        database: @database, pulp_endpoint: settings[:pulp_endpoint],
+        pulp_client_ssl_ca: settings[:pulp_client_ssl_ca],
+        pulp_client_ssl_cert: settings[:pulp_client_ssl_cert],
+        pulp_client_ssl_key: "#{__dir__}/fixtures/mock_pulp_client_ec.key"
+      )
+    end
+  end
+
   def test_update_repository_list
     repo = ::Sequel::Model(@database.connection[:repositories]).create(name: 'some_repo', auth_required: false)
     user = ::Sequel::Model(@database.connection[:users]).create(name: 'foreman')
